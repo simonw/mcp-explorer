@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import pytest
 from click.testing import CliRunner
 from mcp import types
 from mcp.types.version import LATEST_MODERN_VERSION
@@ -514,3 +515,240 @@ def test_doctor_json_exits_nonzero_when_selected_mode_fails(monkeypatch):
 
     assert result.exit_code == 1
     assert json.loads(result.output) == report
+
+
+def test_call_with_repeated_arguments(monkeypatch):
+    async def mock_invoke_tool(
+        url,
+        tool_name,
+        arguments_json,
+        argument_pairs,
+        stateless,
+    ):
+        assert url == "https://example.com/mcp"
+        assert tool_name == "render_svg"
+        assert arguments_json is None
+        assert argument_pairs == (
+            ("source", "graph TD; A-->B"),
+            ("options", '{"padding":24}'),
+        )
+        assert stateless is True
+        return types.CallToolResult(
+            content=[types.TextContent(text="<svg>diagram</svg>")],
+            structuredContent={"ok": True, "width": 640},
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "-a",
+            "source",
+            "graph TD; A-->B",
+            "--argument",
+            "options",
+            '{"padding":24}',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == (
+        "<svg>diagram</svg>\n"
+        "Structured content:\n"
+        "  {\n"
+        '    "ok": true,\n'
+        '    "width": 640\n'
+        "  }\n"
+    )
+
+
+def test_call_with_raw_json_and_json_output(monkeypatch):
+    call_result = types.CallToolResult(
+        content=[types.TextContent(text="done")],
+        _meta={"requestId": "abc"},
+    )
+
+    async def mock_invoke_tool(
+        url,
+        tool_name,
+        arguments_json,
+        argument_pairs,
+        stateless,
+    ):
+        assert arguments_json == '{"source":"graph TD; A-->B"}'
+        assert argument_pairs == ()
+        return call_result
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "--json",
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            '{"source":"graph TD; A-->B"}',
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == call_result.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+
+
+def test_call_reads_raw_json_from_stdin(monkeypatch):
+    async def mock_invoke_tool(
+        url,
+        tool_name,
+        arguments_json,
+        argument_pairs,
+        stateless,
+    ):
+        assert arguments_json == '{"source":"from stdin"}\n'
+        return types.CallToolResult(
+            content=[types.TextContent(text="done")],
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["call", "https://example.com/mcp", "render_svg", "-"],
+        input='{"source":"from stdin"}\n',
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "done\n"
+
+
+def test_build_arguments_uses_schema_types_and_overrides_raw_json():
+    schema = {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "count": {"type": "integer"},
+            "enabled": {"type": "boolean"},
+            "options": {"type": "object"},
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
+        "required": ["source", "count"],
+        "additionalProperties": False,
+    }
+
+    arguments = cli_module.build_arguments(
+        schema,
+        '{"source":"old","count":1}',
+        (
+            ("source", "graph TD; A-->B"),
+            ("count", "2"),
+            ("count", "3"),
+            ("enabled", "true"),
+            ("options", '{"padding":24}'),
+            ("tags", '["one","two"]'),
+        ),
+    )
+
+    assert arguments == {
+        "source": "graph TD; A-->B",
+        "count": 3,
+        "enabled": True,
+        "options": {"padding": 24},
+        "tags": ["one", "two"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("arguments_json", "argument_pairs", "message"),
+    (
+        ("[]", (), "Raw arguments must be a JSON object"),
+        ("not json", (), "Raw arguments must be valid JSON"),
+        (
+            '{"source":"diagram"}',
+            (("count", "not-an-integer"),),
+            "Argument 'count' must be valid JSON",
+        ),
+        (
+            '{"source":"diagram"}',
+            (("unknown", "value"),),
+            "Additional properties are not allowed",
+        ),
+    ),
+)
+def test_build_arguments_rejects_invalid_input(
+    arguments_json,
+    argument_pairs,
+    message,
+):
+    schema = {
+        "type": "object",
+        "properties": {
+            "source": {"type": "string"},
+            "count": {"type": "integer"},
+        },
+        "required": ["source"],
+        "additionalProperties": False,
+    }
+
+    with pytest.raises(cli_module.ArgumentInputError, match=message):
+        cli_module.build_arguments(
+            schema,
+            arguments_json,
+            argument_pairs,
+        )
+
+
+def test_call_tool_error_has_nonzero_exit(monkeypatch):
+    async def mock_invoke_tool(*args):
+        return types.CallToolResult(
+            content=[types.TextContent(text="Rendering failed")],
+            isError=True,
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["call", "https://example.com/mcp", "render_svg"],
+    )
+
+    assert result.exit_code == 1
+    assert result.output == "Rendering failed\n"
+
+
+def test_call_wrapped_argument_error_is_a_usage_error(monkeypatch):
+    class WrappedError(Exception):
+        def __init__(self, exception):
+            self.exceptions = [exception]
+
+    async def mock_invoke_tool(*args):
+        raise WrappedError(
+            cli_module.ArgumentInputError(
+                "Argument 'count' must be valid JSON for type integer"
+            )
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "counter",
+            "-a",
+            "count",
+            "not-a-number",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert (
+        "Error: Argument 'count' must be valid JSON for type integer\n"
+        in result.output
+    )

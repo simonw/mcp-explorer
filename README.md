@@ -57,6 +57,43 @@ complete tool definition as a single JSON object:
 mcp-explorer --json inspect https://agentic-mermaid.dev/mcp render_svg
 ```
 
+Call a tool by passing its arguments as a JSON object:
+
+```bash
+mcp-explorer call \
+  https://agentic-mermaid.dev/mcp \
+  verify \
+  '{"source":"graph TD; A-->B"}'
+```
+
+Alternatively, use repeatable `-a/--argument NAME VALUE` options:
+
+```bash
+mcp-explorer call \
+  https://agentic-mermaid.dev/mcp \
+  render_svg \
+  -a source 'graph TD; A-->B' \
+  -a options '{"padding":24}'
+```
+
+Use `-` to read the raw JSON object from standard input:
+
+```bash
+mcp-explorer call URL TOOL - < arguments.json
+```
+
+When raw JSON and `-a` are combined, individual arguments override matching
+top-level keys in the JSON object and later `-a` values win. Values are
+interpreted using the tool's input schema: strings remain literal, while
+numbers, booleans, arrays, objects, and null are parsed as JSON. The assembled
+arguments are validated against the input schema before the tool is called.
+
+Use the shared `--json` option for the complete MCP `CallToolResult`:
+
+```bash
+mcp-explorer --json call URL TOOL -a name value
+```
+
 Use `info` to show the selected protocol, negotiation mechanism, supported
 versions, server identity, capabilities, and instructions:
 
