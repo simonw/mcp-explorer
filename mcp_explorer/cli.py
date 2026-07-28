@@ -663,15 +663,21 @@ def call_command(
 
 @cli.command(name="info")
 @click.argument("url")
+@click.option(
+    "--json",
+    "command_json_output",
+    is_flag=True,
+    help="Output server information as JSON.",
+)
 @click.pass_obj
-def info_command(options, url):
+def info_command(options, url, command_json_output):
     """Show protocol and metadata for an MCP server at URL."""
     try:
         info = asyncio.run(fetch_server_info(url, options.stateless))
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if options.json_output:
+    if options.json_output or command_json_output:
         click.echo(json.dumps(info, indent=2))
         return
 

@@ -432,6 +432,35 @@ def test_info_json_and_legacy(monkeypatch):
     assert json.loads(result.output) == info
 
 
+def test_info_accepts_command_local_json_option(monkeypatch):
+    info = {
+        "url": "https://example.com/mcp",
+        "mode": "stateless",
+        "negotiation": "server/discover",
+        "protocolVersion": "2026-07-28",
+        "supportedVersions": ["2026-07-28"],
+        "serverInfo": None,
+        "capabilities": {"tools": {}},
+        "instructions": None,
+    }
+
+    async def mock_fetch_server_info(url, stateless):
+        return info
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_server_info",
+        mock_fetch_server_info,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["info", "--json", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == info
+
+
 def test_doctor(monkeypatch):
     report = {
         "url": "https://example.com/mcp",

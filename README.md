@@ -99,7 +99,7 @@ versions, server identity, capabilities, and instructions:
 
 ```bash
 mcp-explorer info https://agentic-mermaid.dev/mcp
-mcp-explorer --json info https://agentic-mermaid.dev/mcp
+mcp-explorer info --json https://agentic-mermaid.dev/mcp
 ```
 
 Use `doctor` to check both stateless and legacy compatibility. The selected
@@ -110,8 +110,9 @@ mcp-explorer doctor https://agentic-mermaid.dev/mcp
 mcp-explorer --legacy doctor https://agentic-mermaid.dev/mcp
 ```
 
-The `--json` and `--stateless/--legacy` options are shared and must appear
-before the command name.
+The shared `--json` form is still accepted before any command. The
+`--stateless/--legacy` option is shared and must appear before the command
+name.
 
 For help, run:
 
