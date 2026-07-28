@@ -1,0 +1,29 @@
+[project]
+name = "mcp-explorer"
+version = "0.1"
+description = "CLI tool for exploring MCP servers"
+readme = "README.md"
+authors = [{name = "Simon Willison"}]
+license = "Apache-2.0"
+requires-python = ">=3.10"
+classifiers = []
+dependencies = [
+    "click",
+    "mcp>=2.0.0"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Homepage = "https://github.com/simonw/mcp-explorer"
+Changelog = "https://github.com/simonw/mcp-explorer/releases"
+Issues = "https://github.com/simonw/mcp-explorer/issues"
+CI = "https://github.com/simonw/mcp-explorer/actions"
+
+[project.scripts]
+mcp-explorer = "mcp_explorer.cli:cli"
+
+[project.optional-dependencies]
+test = ["pytest"]
