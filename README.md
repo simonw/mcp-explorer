@@ -21,18 +21,26 @@ List the tools exposed by a streamable HTTP MCP server:
 mcp-explorer list https://agentic-mermaid.dev/mcp
 ```
 
+The default output is deliberately compact: each tool is shown as a signature
+and a one-line description. Use `-N` or `--no-truncate` for full descriptions
+and detailed parameter metadata:
+
+```bash
+mcp-explorer list -N https://agentic-mermaid.dev/mcp
+```
+
 This forces the current MCP 2 stateless protocol by default. Use `--legacy` to
 force the older initialize-handshake protocol instead:
 
 ```bash
-mcp-explorer list --legacy https://agentic-mermaid.dev/mcp
+mcp-explorer --legacy list https://agentic-mermaid.dev/mcp
 ```
 
 Use `--json` to output the complete tool definitions, including their input
 schemas:
 
 ```bash
-mcp-explorer list --json https://agentic-mermaid.dev/mcp
+mcp-explorer --json list https://agentic-mermaid.dev/mcp
 ```
 
 Inspect a single tool in detail:
@@ -46,11 +54,27 @@ annotations, execution metadata, icons, and `_meta`. Use `--json` for the
 complete tool definition as a single JSON object:
 
 ```bash
-mcp-explorer inspect --json https://agentic-mermaid.dev/mcp render_svg
+mcp-explorer --json inspect https://agentic-mermaid.dev/mcp render_svg
 ```
 
-The `inspect` command also accepts `--legacy` to force the older
-initialize-handshake protocol.
+Use `info` to show the selected protocol, negotiation mechanism, supported
+versions, server identity, capabilities, and instructions:
+
+```bash
+mcp-explorer info https://agentic-mermaid.dev/mcp
+mcp-explorer --json info https://agentic-mermaid.dev/mcp
+```
+
+Use `doctor` to check both stateless and legacy compatibility. The selected
+mode is checked first and determines the exit status:
+
+```bash
+mcp-explorer doctor https://agentic-mermaid.dev/mcp
+mcp-explorer --legacy doctor https://agentic-mermaid.dev/mcp
+```
+
+The `--json` and `--stateless/--legacy` options are shared and must appear
+before the command name.
 
 For help, run:
 
