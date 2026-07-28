@@ -149,15 +149,9 @@ def _schema_allows_string(schema, root_schema):
 
     alternatives = schema.get("anyOf") or schema.get("oneOf")
     if alternatives:
-        return any(
-            _schema_allows_string(item, root_schema)
-            for item in alternatives
-        )
+        return any(_schema_allows_string(item, root_schema) for item in alternatives)
     if schema.get("allOf"):
-        return all(
-            _schema_allows_string(item, root_schema)
-            for item in schema["allOf"]
-        )
+        return all(_schema_allows_string(item, root_schema) for item in schema["allOf"])
     return False
 
 
@@ -186,12 +180,9 @@ def _parse_argument_value(name, value, schema, root_schema):
         return json.loads(value)
     except json.JSONDecodeError as ex:
         if _schema_requires_json(schema, root_schema):
-            expected_type = _short_schema_type(
-                _resolve_local_ref(schema, root_schema)
-            )
+            expected_type = _short_schema_type(_resolve_local_ref(schema, root_schema))
             raise ArgumentInputError(
-                f"Argument {name!r} must be valid JSON "
-                f"for type {expected_type}"
+                f"Argument {name!r} must be valid JSON " f"for type {expected_type}"
             ) from ex
         return value
 
@@ -216,9 +207,7 @@ def build_arguments(input_schema, arguments_json, argument_pairs):
         parameter_schema = properties.get(name)
         if parameter_schema is None:
             parameter_schema = (
-                additional_properties
-                if isinstance(additional_properties, dict)
-                else {}
+                additional_properties if isinstance(additional_properties, dict) else {}
             )
         arguments[name] = _parse_argument_value(
             name,
@@ -235,17 +224,13 @@ def build_arguments(input_schema, arguments_json, argument_pairs):
             key=lambda error: list(error.absolute_path),
         )
     except jsonschema.exceptions.SchemaError as ex:
-        raise ArgumentInputError(
-            f"Tool input schema is invalid: {ex.message}"
-        ) from ex
+        raise ArgumentInputError(f"Tool input schema is invalid: {ex.message}") from ex
 
     if validation_errors:
         error = validation_errors[0]
         path = ".".join(str(part) for part in error.absolute_path)
         message = f"{path}: {error.message}" if path else error.message
-        raise ArgumentInputError(
-            f"Arguments do not match input schema: {message}"
-        )
+        raise ArgumentInputError(f"Arguments do not match input schema: {message}")
 
     return arguments
 
@@ -355,9 +340,7 @@ async def _doctor_mode(url, stateless, selected):
                 if not cursor:
                     break
                 if cursor in seen_cursors:
-                    raise RuntimeError(
-                        f"Server repeated pagination cursor {cursor!r}"
-                    )
+                    raise RuntimeError(f"Server repeated pagination cursor {cursor!r}")
                 seen_cursors.add(cursor)
 
             return {
@@ -479,9 +462,7 @@ def _tool_heading(tool, include_signature=False):
         parameters = []
         for name, schema in tool.input_schema.get("properties", {}).items():
             optional = "" if name in required else "?"
-            parameters.append(
-                f"{name}{optional}: {_short_schema_type(schema)}"
-            )
+            parameters.append(f"{name}{optional}: {_short_schema_type(schema)}")
         heading = f"{heading}({', '.join(parameters)})"
     if tool.title:
         heading = f"{heading} - {tool.title}"
@@ -855,10 +836,7 @@ def info_command(options, url, command_json_output):
     click.echo(f"Negotiation: {info['negotiation']}")
     click.echo(f"Protocol version: {info['protocolVersion']}")
     if info["supportedVersions"]:
-        click.echo(
-            "Supported versions: "
-            + ", ".join(info["supportedVersions"])
-        )
+        click.echo("Supported versions: " + ", ".join(info["supportedVersions"]))
     _render_json_section("Server info", info["serverInfo"])
     _render_json_section("Capabilities", info["capabilities"])
     if info["instructions"]:
@@ -877,25 +855,18 @@ def _render_doctor(report):
         click.echo(f"{check['mode']}{selected}: {check['status']}")
         click.echo(f"  Latency: {check['latencyMs']:.2f} ms")
         if check["status"] == "ok":
+            click.echo(f"  Protocol version: {check['protocolVersion']}")
             click.echo(
-                f"  Protocol version: {check['protocolVersion']}"
-            )
-            click.echo(
-                f"  Tools: {check['toolCount']} "
-                f"across {check['pages']} page(s)"
+                f"  Tools: {check['toolCount']} " f"across {check['pages']} page(s)"
             )
             capabilities = check.get("capabilities") or {}
             if capabilities:
-                click.echo(
-                    "  Capabilities: " + ", ".join(capabilities)
-                )
+                click.echo("  Capabilities: " + ", ".join(capabilities))
         else:
             click.echo(f"  Error: {check['error']}")
 
     click.echo()
-    click.echo(
-        "Result: " + ("healthy" if report["healthy"] else "unhealthy")
-    )
+    click.echo("Result: " + ("healthy" if report["healthy"] else "unhealthy"))
 
 
 @cli.command(name="doctor")

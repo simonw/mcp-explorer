@@ -96,10 +96,7 @@ def test_list(monkeypatch):
 
     assert result.exit_code == 0
     assert result.output == (
-        "get_weather(city: string)\n"
-        "  Get the current weather.\n"
-        "\n"
-        "get_time()\n"
+        "get_weather(city: string)\n" "  Get the current weather.\n" "\n" "get_time()\n"
     )
 
 
@@ -306,7 +303,10 @@ def test_inspect(monkeypatch):
     assert 'Output schema:\n  {\n    "type": "object",' in result.output
     assert 'Annotations:\n  {\n    "readOnlyHint": true,' in result.output
     assert 'Execution:\n  {\n    "taskSupport": "optional"\n  }' in result.output
-    assert 'Icons:\n  [\n    {\n      "src": "https://example.com/weather.png",' in result.output
+    assert (
+        'Icons:\n  [\n    {\n      "src": "https://example.com/weather.png",'
+        in result.output
+    )
     assert 'Metadata:\n  {\n    "owner": "weather-team"\n  }' in result.output
 
 
@@ -778,8 +778,7 @@ def test_call_wrapped_argument_error_is_a_usage_error(monkeypatch):
 
     assert result.exit_code == 2
     assert (
-        "Error: Argument 'count' must be valid JSON for type integer\n"
-        in result.output
+        "Error: Argument 'count' must be valid JSON for type integer\n" in result.output
     )
 
 
@@ -1024,9 +1023,7 @@ def test_prompt_and_resource_fetchers_follow_pagination(monkeypatch):
                     nextCursor="prompts-page-2",
                 )
             assert cursor == "prompts-page-2"
-            return types.ListPromptsResult(
-                prompts=[types.Prompt(name="second")]
-            )
+            return types.ListPromptsResult(prompts=[types.Prompt(name="second")])
 
         async def list_resources(self, *, cursor):
             if cursor is None:
