@@ -1,19 +1,12 @@
 import asyncio
 import json
 import time
-from dataclasses import dataclass
 
 import click
 import jsonschema
 from mcp import types
 from mcp.client import Client
 from mcp.types.version import LATEST_MODERN_VERSION
-
-
-@dataclass(frozen=True)
-class CliOptions:
-    json_output: bool
-    stateless: bool
 
 
 class ArgumentInputError(ValueError):
@@ -24,26 +17,33 @@ class ToolNotFoundError(ValueError):
     pass
 
 
+def shared_options(fn):
+    for decorator in reversed(
+        (
+            click.option(
+                "--json",
+                "json_output",
+                is_flag=True,
+                help="Output JSON.",
+            ),
+            click.option(
+                "--stateless/--legacy",
+                default=True,
+                help=(
+                    "Force stateless MCP 2 (default) or the legacy "
+                    "initialize handshake."
+                ),
+            ),
+        )
+    ):
+        fn = decorator(fn)
+    return fn
+
+
 @click.group()
 @click.version_option()
-@click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    help="Output JSON.",
-)
-@click.option(
-    "--stateless/--legacy",
-    default=True,
-    help="Force stateless MCP 2 (default) or the legacy initialize handshake.",
-)
-@click.pass_context
-def cli(context, json_output, stateless):
+def cli():
     """CLI tool for exploring MCP servers."""
-    context.obj = CliOptions(
-        json_output=json_output,
-        stateless=stateless,
-    )
 
 
 def _client_mode(stateless):
@@ -506,15 +506,15 @@ def _render_json_section(label, value):
     is_flag=True,
     help="Show full descriptions and detailed parameters.",
 )
-@click.pass_obj
-def list_tools(options, url, no_truncate):
+@shared_options
+def list_tools(url, no_truncate, json_output, stateless):
     """List the tools exposed by an MCP server at URL."""
     try:
-        tools = asyncio.run(fetch_tools(url, options.stateless))
+        tools = asyncio.run(fetch_tools(url, stateless))
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if options.json_output:
+    if json_output:
         click.echo(json.dumps([_tool_dict(tool) for tool in tools], indent=2))
         return
 
@@ -538,47 +538,17 @@ def list_tools(options, url, no_truncate):
                 click.echo(f"  {summary}")
 
 
-def _listing_mode(options, command_legacy):
-    return options.stateless and not command_legacy
-
-
-def _listing_json(options, command_json_output):
-    return options.json_output or command_json_output
-
-
 @cli.command(name="prompts")
 @click.argument("url")
-@click.option(
-    "--json",
-    "command_json_output",
-    is_flag=True,
-    help="Output complete prompt definitions as JSON.",
-)
-@click.option(
-    "--legacy",
-    "command_legacy",
-    is_flag=True,
-    help="Force the legacy initialize handshake.",
-)
-@click.pass_obj
-def prompts_command(
-    options,
-    url,
-    command_json_output,
-    command_legacy,
-):
+@shared_options
+def prompts_command(url, json_output, stateless):
     """List the prompts exposed by an MCP server at URL."""
     try:
-        prompts = asyncio.run(
-            fetch_prompts(
-                url,
-                _listing_mode(options, command_legacy),
-            )
-        )
+        prompts = asyncio.run(fetch_prompts(url, stateless))
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if _listing_json(options, command_json_output):
+    if json_output:
         click.echo(
             json.dumps(
                 [_model_dict(prompt) for prompt in prompts],
@@ -619,37 +589,15 @@ def prompts_command(
 
 @cli.command(name="resources")
 @click.argument("url")
-@click.option(
-    "--json",
-    "command_json_output",
-    is_flag=True,
-    help="Output complete resource definitions as JSON.",
-)
-@click.option(
-    "--legacy",
-    "command_legacy",
-    is_flag=True,
-    help="Force the legacy initialize handshake.",
-)
-@click.pass_obj
-def resources_command(
-    options,
-    url,
-    command_json_output,
-    command_legacy,
-):
+@shared_options
+def resources_command(url, json_output, stateless):
     """List the resources exposed by an MCP server at URL."""
     try:
-        resources = asyncio.run(
-            fetch_resources(
-                url,
-                _listing_mode(options, command_legacy),
-            )
-        )
+        resources = asyncio.run(fetch_resources(url, stateless))
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if _listing_json(options, command_json_output):
+    if json_output:
         click.echo(
             json.dumps(
                 [_model_dict(resource) for resource in resources],
@@ -682,15 +630,15 @@ def resources_command(
 @cli.command(name="inspect")
 @click.argument("url")
 @click.argument("tool_name")
-@click.pass_obj
-def inspect_tool(options, url, tool_name):
+@shared_options
+def inspect_tool(url, tool_name, json_output, stateless):
     """Inspect one tool exposed by an MCP server at URL."""
     try:
         tool = asyncio.run(
             fetch_tool(
                 url,
                 tool_name,
-                options.stateless,
+                stateless,
             )
         )
     except Exception as ex:
@@ -699,7 +647,7 @@ def inspect_tool(options, url, tool_name):
     if tool is None:
         raise click.ClickException(f"Tool {tool_name!r} not found.")
 
-    if options.json_output:
+    if json_output:
         click.echo(json.dumps(_tool_dict(tool), indent=2))
         return
 
@@ -767,13 +715,14 @@ def _render_call_result(result):
     metavar="NAME VALUE",
     help="Set one tool argument; repeat for multiple arguments.",
 )
-@click.pass_obj
+@shared_options
 def call_command(
-    options,
     url,
     tool_name,
     arguments_json,
     argument_pairs,
+    json_output,
+    stateless,
 ):
     """Call a tool with optional JSON and individual arguments."""
     if arguments_json == "-":
@@ -786,7 +735,7 @@ def call_command(
                 tool_name,
                 arguments_json,
                 argument_pairs,
-                options.stateless,
+                stateless,
             )
         )
     except ArgumentInputError as ex:
@@ -802,7 +751,7 @@ def call_command(
             raise click.ClickException(str(tool_error)) from ex
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if options.json_output:
+    if json_output:
         click.echo(json.dumps(_model_dict(result), indent=2))
     else:
         _render_call_result(result)
@@ -813,21 +762,15 @@ def call_command(
 
 @cli.command(name="info")
 @click.argument("url")
-@click.option(
-    "--json",
-    "command_json_output",
-    is_flag=True,
-    help="Output server information as JSON.",
-)
-@click.pass_obj
-def info_command(options, url, command_json_output):
+@shared_options
+def info_command(url, json_output, stateless):
     """Show protocol and metadata for an MCP server at URL."""
     try:
-        info = asyncio.run(fetch_server_info(url, options.stateless))
+        info = asyncio.run(fetch_server_info(url, stateless))
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if options.json_output or command_json_output:
+    if json_output:
         click.echo(json.dumps(info, indent=2))
         return
 
@@ -871,12 +814,12 @@ def _render_doctor(report):
 
 @cli.command(name="doctor")
 @click.argument("url")
-@click.pass_obj
-def doctor_command(options, url):
+@shared_options
+def doctor_command(url, json_output, stateless):
     """Check stateless and legacy compatibility for an MCP server at URL."""
-    report = asyncio.run(doctor_server(url, options.stateless))
+    report = asyncio.run(doctor_server(url, stateless))
 
-    if options.json_output:
+    if json_output:
         click.echo(json.dumps(report, indent=2))
     else:
         _render_doctor(report)

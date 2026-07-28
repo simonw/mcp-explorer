@@ -33,14 +33,14 @@ This forces the current MCP 2 stateless protocol by default. Use `--legacy` to
 force the older initialize-handshake protocol instead:
 
 ```bash
-mcp-explorer --legacy list https://agentic-mermaid.dev/mcp
+mcp-explorer list https://agentic-mermaid.dev/mcp --legacy
 ```
 
 Use `--json` to output the complete tool definitions, including their input
 schemas:
 
 ```bash
-mcp-explorer --json list https://agentic-mermaid.dev/mcp
+mcp-explorer list https://agentic-mermaid.dev/mcp --json
 ```
 
 Inspect a single tool in detail:
@@ -54,7 +54,7 @@ annotations, execution metadata, icons, and `_meta`. Use `--json` for the
 complete tool definition as a single JSON object:
 
 ```bash
-mcp-explorer --json inspect https://agentic-mermaid.dev/mcp render_svg
+mcp-explorer inspect https://agentic-mermaid.dev/mcp render_svg --json
 ```
 
 Call a tool by passing its arguments as a JSON object:
@@ -88,18 +88,18 @@ interpreted using the tool's input schema: strings remain literal, while
 numbers, booleans, arrays, objects, and null are parsed as JSON. The assembled
 arguments are validated against the input schema before the tool is called.
 
-Use the shared `--json` option for the complete MCP `CallToolResult`:
+Use `--json` for the complete MCP `CallToolResult`:
 
 ```bash
-mcp-explorer --json call URL TOOL -a name value
+mcp-explorer call URL TOOL -a name value --json
 ```
 
 List every prompt exposed by a server:
 
 ```bash
 mcp-explorer prompts URL
-mcp-explorer prompts --json URL
-mcp-explorer prompts --legacy URL
+mcp-explorer prompts URL --json
+mcp-explorer prompts URL --legacy
 ```
 
 The human-readable output includes prompt arguments and whether each is
@@ -109,21 +109,20 @@ List every directly-addressable resource exposed by a server:
 
 ```bash
 mcp-explorer resources URL
-mcp-explorer resources --json URL
-mcp-explorer resources --legacy URL
+mcp-explorer resources URL --json
+mcp-explorer resources URL --legacy
 ```
 
 The human-readable output includes each resource URI, MIME type, size, and
 description when available. Both commands follow pagination until all results
-have been collected. The shared root-level `--json` and `--legacy` forms are
-also supported.
+have been collected.
 
 Use `info` to show the selected protocol, negotiation mechanism, supported
 versions, server identity, capabilities, and instructions:
 
 ```bash
 mcp-explorer info https://agentic-mermaid.dev/mcp
-mcp-explorer info --json https://agentic-mermaid.dev/mcp
+mcp-explorer info https://agentic-mermaid.dev/mcp --json
 ```
 
 Use `doctor` to check both stateless and legacy compatibility. The selected
@@ -131,12 +130,11 @@ mode is checked first and determines the exit status:
 
 ```bash
 mcp-explorer doctor https://agentic-mermaid.dev/mcp
-mcp-explorer --legacy doctor https://agentic-mermaid.dev/mcp
+mcp-explorer doctor https://agentic-mermaid.dev/mcp --legacy
 ```
 
-The shared `--json` form is still accepted before any command. The
-`--stateless/--legacy` option is shared and must appear before the command
-name.
+Every command accepts `--json` and `--stateless/--legacy`. These options can
+appear anywhere after the command name.
 
 For help, run:
 

@@ -158,7 +158,7 @@ def test_list_json(monkeypatch):
     monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
     result = CliRunner().invoke(
         cli_module.cli,
-        ["--json", "list", "https://example.com/mcp"],
+        ["list", "https://example.com/mcp", "--json"],
     )
 
     assert result.exit_code == 0
@@ -197,7 +197,7 @@ def test_legacy_option(monkeypatch):
     monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
     result = CliRunner().invoke(
         cli_module.cli,
-        ["--legacy", "list", "https://example.com/mcp"],
+        ["list", "https://example.com/mcp", "--legacy"],
     )
 
     assert result.exit_code == 0
@@ -319,11 +319,11 @@ def test_inspect_json_and_legacy(monkeypatch):
     result = CliRunner().invoke(
         cli_module.cli,
         [
-            "--legacy",
-            "--json",
             "inspect",
             "https://example.com/mcp",
             "get_weather",
+            "--legacy",
+            "--json",
         ],
     )
 
@@ -349,16 +349,38 @@ def test_inspect_missing_tool(monkeypatch):
     assert result.output == "Error: Tool 'missing' not found.\n"
 
 
-def test_shared_options_are_only_on_the_cli_group():
+def test_shared_options_are_only_on_commands():
     runner = CliRunner()
     group_help = runner.invoke(cli_module.cli, ["--help"])
-    list_help = runner.invoke(cli_module.cli, ["list", "--help"])
 
     assert group_help.exit_code == 0
-    assert "--json" in group_help.output
-    assert "--stateless / --legacy" in group_help.output
-    assert "--json" not in list_help.output
-    assert "--stateless / --legacy" not in list_help.output
+    assert "--json" not in group_help.output
+    assert "--stateless / --legacy" not in group_help.output
+
+    for command in (
+        "list",
+        "inspect",
+        "call",
+        "info",
+        "doctor",
+        "prompts",
+        "resources",
+    ):
+        command_help = runner.invoke(cli_module.cli, [command, "--help"])
+        assert command_help.exit_code == 0
+        assert "--json" in command_help.output
+        assert "--stateless / --legacy" in command_help.output
+
+
+@pytest.mark.parametrize("option", ("--json", "--legacy", "--stateless"))
+def test_shared_options_are_rejected_at_root(option):
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [option, "list", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 2
+    assert f"No such option '{option}'" in result.output
 
 
 def test_info(monkeypatch):
@@ -425,7 +447,7 @@ def test_info_json_and_legacy(monkeypatch):
     )
     result = CliRunner().invoke(
         cli_module.cli,
-        ["--json", "--legacy", "info", "https://example.com/mcp"],
+        ["info", "https://example.com/mcp", "--json", "--legacy"],
     )
 
     assert result.exit_code == 0
@@ -539,7 +561,7 @@ def test_doctor_json_exits_nonzero_when_selected_mode_fails(monkeypatch):
     monkeypatch.setattr(cli_module, "doctor_server", mock_doctor_server)
     result = CliRunner().invoke(
         cli_module.cli,
-        ["--json", "--legacy", "doctor", "https://example.com/mcp"],
+        ["doctor", "https://example.com/mcp", "--json", "--legacy"],
     )
 
     assert result.exit_code == 1
@@ -615,11 +637,11 @@ def test_call_with_raw_json_and_json_output(monkeypatch):
     result = CliRunner().invoke(
         cli_module.cli,
         [
-            "--json",
             "call",
             "https://example.com/mcp",
             "render_svg",
             '{"source":"graph TD; A-->B"}',
+            "--json",
         ],
     )
 
@@ -953,10 +975,10 @@ def test_resources_respect_shared_json_and_legacy(monkeypatch):
     result = CliRunner().invoke(
         cli_module.cli,
         [
-            "--legacy",
-            "--json",
             "resources",
             "https://example.com/mcp",
+            "--legacy",
+            "--json",
         ],
     )
 
