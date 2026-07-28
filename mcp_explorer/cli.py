@@ -2,8 +2,8 @@ import asyncio
 import json
 
 import click
-from mcp import ClientSession, types
-from mcp.client.streamable_http import streamable_http_client
+from mcp.client import Client
+from mcp.types.version import LATEST_MODERN_VERSION
 
 
 @click.group()
@@ -12,24 +12,19 @@ def cli():
     """CLI tool for exploring MCP servers."""
 
 
-async def fetch_tools(url):
+async def fetch_tools(url, stateless):
     """Connect to an MCP server and return all of its tools."""
     tools = []
     cursor = None
+    mode = LATEST_MODERN_VERSION if stateless else "legacy"
 
-    async with streamable_http_client(url) as (read_stream, write_stream):
-        async with ClientSession(read_stream, write_stream) as session:
-            await session.initialize()
-
-            while True:
-                params = (
-                    types.PaginatedRequestParams(cursor=cursor) if cursor else None
-                )
-                result = await session.list_tools(params=params)
-                tools.extend(result.tools)
-                cursor = result.next_cursor
-                if not cursor:
-                    return tools
+    async with Client(url, mode=mode) as client:
+        while True:
+            result = await client.list_tools(cursor=cursor)
+            tools.extend(result.tools)
+            cursor = result.next_cursor
+            if not cursor:
+                return tools
 
 
 def _description_lines(description):
@@ -84,7 +79,7 @@ def _schema_type(schema):
     if "maxItems" in schema:
         details.append(f"at most {schema['maxItems']} item(s)")
     if "pattern" in schema:
-        details.append(f"pattern {schema['pattern']!r}")
+        details.append("pattern constrained")
 
     if details:
         return f"{label}; {'; '.join(details)}"
@@ -115,10 +110,15 @@ def _render_parameters(input_schema):
     is_flag=True,
     help="Output the complete tool definitions as JSON.",
 )
-def list_tools(url, json_output):
+@click.option(
+    "--stateless/--legacy",
+    default=True,
+    help="Force stateless MCP 2 (default) or the legacy initialize handshake.",
+)
+def list_tools(url, json_output, stateless):
     """List the tools exposed by an MCP server at URL."""
     try:
-        tools = asyncio.run(fetch_tools(url))
+        tools = asyncio.run(fetch_tools(url, stateless))
     except Exception as ex:
         raise click.ClickException(str(ex)) from ex
 

@@ -21,6 +21,13 @@ List the tools exposed by a streamable HTTP MCP server:
 mcp-explorer list https://agentic-mermaid.dev/mcp
 ```
 
+This forces the current MCP 2 stateless protocol by default. Use `--legacy` to
+force the older initialize-handshake protocol instead:
+
+```bash
+mcp-explorer list --legacy https://agentic-mermaid.dev/mcp
+```
+
 Use `--json` to output the complete tool definitions, including their input
 schemas:
 
