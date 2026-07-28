@@ -94,6 +94,30 @@ Use the shared `--json` option for the complete MCP `CallToolResult`:
 mcp-explorer --json call URL TOOL -a name value
 ```
 
+List every prompt exposed by a server:
+
+```bash
+mcp-explorer prompts URL
+mcp-explorer prompts --json URL
+mcp-explorer prompts --legacy URL
+```
+
+The human-readable output includes prompt arguments and whether each is
+required. JSON output contains the complete prompt definitions.
+
+List every directly-addressable resource exposed by a server:
+
+```bash
+mcp-explorer resources URL
+mcp-explorer resources --json URL
+mcp-explorer resources --legacy URL
+```
+
+The human-readable output includes each resource URI, MIME type, size, and
+description when available. Both commands follow pagination until all results
+have been collected. The shared root-level `--json` and `--legacy` forms are
+also supported.
+
 Use `info` to show the selected protocol, negotiation mechanism, supported
 versions, server identity, capabilities, and instructions:
 

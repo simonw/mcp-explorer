@@ -64,6 +64,34 @@ async def fetch_tools(url, stateless):
                 return tools
 
 
+async def fetch_prompts(url, stateless):
+    """Connect to an MCP server and return all of its prompts."""
+    prompts = []
+    cursor = None
+
+    async with Client(url, mode=_client_mode(stateless)) as client:
+        while True:
+            result = await client.list_prompts(cursor=cursor)
+            prompts.extend(result.prompts)
+            cursor = result.next_cursor
+            if not cursor:
+                return prompts
+
+
+async def fetch_resources(url, stateless):
+    """Connect to an MCP server and return all of its resources."""
+    resources = []
+    cursor = None
+
+    async with Client(url, mode=_client_mode(stateless)) as client:
+        while True:
+            result = await client.list_resources(cursor=cursor)
+            resources.extend(result.resources)
+            cursor = result.next_cursor
+            if not cursor:
+                return resources
+
+
 async def fetch_tool(url, name, stateless):
     """Connect to an MCP server and return the named tool, if it exists."""
     async with Client(url, mode=_client_mode(stateless)) as client:
@@ -527,6 +555,147 @@ def list_tools(options, url, no_truncate):
             summary = _first_description_line(tool.description)
             if summary:
                 click.echo(f"  {summary}")
+
+
+def _listing_mode(options, command_legacy):
+    return options.stateless and not command_legacy
+
+
+def _listing_json(options, command_json_output):
+    return options.json_output or command_json_output
+
+
+@cli.command(name="prompts")
+@click.argument("url")
+@click.option(
+    "--json",
+    "command_json_output",
+    is_flag=True,
+    help="Output complete prompt definitions as JSON.",
+)
+@click.option(
+    "--legacy",
+    "command_legacy",
+    is_flag=True,
+    help="Force the legacy initialize handshake.",
+)
+@click.pass_obj
+def prompts_command(
+    options,
+    url,
+    command_json_output,
+    command_legacy,
+):
+    """List the prompts exposed by an MCP server at URL."""
+    try:
+        prompts = asyncio.run(
+            fetch_prompts(
+                url,
+                _listing_mode(options, command_legacy),
+            )
+        )
+    except Exception as ex:
+        raise click.ClickException(_exception_message(ex)) from ex
+
+    if _listing_json(options, command_json_output):
+        click.echo(
+            json.dumps(
+                [_model_dict(prompt) for prompt in prompts],
+                indent=2,
+            )
+        )
+        return
+
+    if not prompts:
+        click.echo("No prompts available.")
+        return
+
+    for index, prompt in enumerate(prompts):
+        if index:
+            click.echo()
+        heading = prompt.name
+        if prompt.title:
+            heading = f"{heading} - {prompt.title}"
+        click.echo(heading)
+        summary = _first_description_line(prompt.description)
+        if summary:
+            click.echo(f"  {summary}")
+
+        if not prompt.arguments:
+            click.echo("  Arguments: none")
+            continue
+        click.echo("  Arguments:")
+        for argument in prompt.arguments:
+            requirement = "required" if argument.required else "optional"
+            argument_heading = argument.name
+            if argument.title:
+                argument_heading = f"{argument_heading} - {argument.title}"
+            click.echo(f"    {argument_heading} ({requirement})")
+            description = _first_description_line(argument.description)
+            if description:
+                click.echo(f"      {description}")
+
+
+@cli.command(name="resources")
+@click.argument("url")
+@click.option(
+    "--json",
+    "command_json_output",
+    is_flag=True,
+    help="Output complete resource definitions as JSON.",
+)
+@click.option(
+    "--legacy",
+    "command_legacy",
+    is_flag=True,
+    help="Force the legacy initialize handshake.",
+)
+@click.pass_obj
+def resources_command(
+    options,
+    url,
+    command_json_output,
+    command_legacy,
+):
+    """List the resources exposed by an MCP server at URL."""
+    try:
+        resources = asyncio.run(
+            fetch_resources(
+                url,
+                _listing_mode(options, command_legacy),
+            )
+        )
+    except Exception as ex:
+        raise click.ClickException(_exception_message(ex)) from ex
+
+    if _listing_json(options, command_json_output):
+        click.echo(
+            json.dumps(
+                [_model_dict(resource) for resource in resources],
+                indent=2,
+            )
+        )
+        return
+
+    if not resources:
+        click.echo("No resources available.")
+        return
+
+    for index, resource in enumerate(resources):
+        if index:
+            click.echo()
+        heading = resource.name
+        if resource.title:
+            heading = f"{heading} - {resource.title}"
+        click.echo(heading)
+        click.echo(f"  {resource.uri}")
+        summary = _first_description_line(resource.description)
+        if summary:
+            click.echo(f"  {summary}")
+        if resource.mime_type:
+            click.echo(f"  MIME type: {resource.mime_type}")
+        if resource.size is not None:
+            click.echo(f"  Size: {resource.size} bytes")
 
 
 @cli.command(name="inspect")

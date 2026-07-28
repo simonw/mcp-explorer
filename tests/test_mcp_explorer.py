@@ -781,3 +781,289 @@ def test_call_wrapped_argument_error_is_a_usage_error(monkeypatch):
         "Error: Argument 'count' must be valid JSON for type integer\n"
         in result.output
     )
+
+
+def test_prompts(monkeypatch):
+    prompts = [
+        types.Prompt(
+            name="code_review",
+            title="Code Review",
+            description="Review code for correctness.",
+            arguments=[
+                types.PromptArgument(
+                    name="code",
+                    description="Code to review.",
+                    required=True,
+                ),
+                types.PromptArgument(
+                    name="language",
+                    description="Programming language.",
+                ),
+            ],
+        ),
+        types.Prompt(name="summarize"),
+    ]
+
+    async def mock_fetch_prompts(url, stateless):
+        assert url == "https://example.com/mcp"
+        assert stateless is True
+        return prompts
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_prompts",
+        mock_fetch_prompts,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["prompts", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == (
+        "code_review - Code Review\n"
+        "  Review code for correctness.\n"
+        "  Arguments:\n"
+        "    code (required)\n"
+        "      Code to review.\n"
+        "    language (optional)\n"
+        "      Programming language.\n"
+        "\n"
+        "summarize\n"
+        "  Arguments: none\n"
+    )
+
+
+def test_prompts_command_local_json_and_legacy(monkeypatch):
+    prompts = [
+        types.Prompt(
+            name="code_review",
+            arguments=[types.PromptArgument(name="code", required=True)],
+        )
+    ]
+
+    async def mock_fetch_prompts(url, stateless):
+        assert stateless is False
+        return prompts
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_prompts",
+        mock_fetch_prompts,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "prompts",
+            "--legacy",
+            "--json",
+            "https://example.com/mcp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [
+        prompt.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        )
+        for prompt in prompts
+    ]
+
+
+def test_prompts_with_no_prompts(monkeypatch):
+    async def mock_fetch_prompts(url, stateless):
+        return []
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_prompts",
+        mock_fetch_prompts,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["prompts", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "No prompts available.\n"
+
+
+def test_resources(monkeypatch):
+    resources = [
+        types.Resource(
+            name="project-readme",
+            title="Project README",
+            uri="file:///project/README.md",
+            description="Project documentation.",
+            mimeType="text/markdown",
+            size=1234,
+        ),
+        types.Resource(
+            name="settings",
+            uri="config://settings",
+        ),
+    ]
+
+    async def mock_fetch_resources(url, stateless):
+        assert url == "https://example.com/mcp"
+        assert stateless is True
+        return resources
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_resources",
+        mock_fetch_resources,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["resources", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == (
+        "project-readme - Project README\n"
+        "  file:///project/README.md\n"
+        "  Project documentation.\n"
+        "  MIME type: text/markdown\n"
+        "  Size: 1234 bytes\n"
+        "\n"
+        "settings\n"
+        "  config://settings\n"
+    )
+
+
+def test_resources_respect_shared_json_and_legacy(monkeypatch):
+    resources = [
+        types.Resource(
+            name="settings",
+            uri="config://settings",
+        )
+    ]
+
+    async def mock_fetch_resources(url, stateless):
+        assert stateless is False
+        return resources
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_resources",
+        mock_fetch_resources,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "--legacy",
+            "--json",
+            "resources",
+            "https://example.com/mcp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == [
+        resource.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        )
+        for resource in resources
+    ]
+
+
+def test_resources_accept_command_local_json_and_legacy(monkeypatch):
+    resources = [
+        types.Resource(
+            name="settings",
+            uri="config://settings",
+        )
+    ]
+
+    async def mock_fetch_resources(url, stateless):
+        assert stateless is False
+        return resources
+
+    monkeypatch.setattr(
+        cli_module,
+        "fetch_resources",
+        mock_fetch_resources,
+    )
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "resources",
+            "--legacy",
+            "--json",
+            "https://example.com/mcp",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)[0]["uri"] == "config://settings"
+
+
+def test_prompt_and_resource_fetchers_follow_pagination(monkeypatch):
+    modes = []
+
+    class MockClient:
+        def __init__(self, url, *, mode):
+            assert url == "https://example.com/mcp"
+            modes.append(mode)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def list_prompts(self, *, cursor):
+            if cursor is None:
+                return types.ListPromptsResult(
+                    prompts=[types.Prompt(name="first")],
+                    nextCursor="prompts-page-2",
+                )
+            assert cursor == "prompts-page-2"
+            return types.ListPromptsResult(
+                prompts=[types.Prompt(name="second")]
+            )
+
+        async def list_resources(self, *, cursor):
+            if cursor is None:
+                return types.ListResourcesResult(
+                    resources=[
+                        types.Resource(
+                            name="first",
+                            uri="test://first",
+                        )
+                    ],
+                    nextCursor="resources-page-2",
+                )
+            assert cursor == "resources-page-2"
+            return types.ListResourcesResult(
+                resources=[
+                    types.Resource(
+                        name="second",
+                        uri="test://second",
+                    )
+                ]
+            )
+
+    monkeypatch.setattr(cli_module, "Client", MockClient)
+
+    prompts = asyncio.run(
+        cli_module.fetch_prompts(
+            "https://example.com/mcp",
+            stateless=True,
+        )
+    )
+    resources = asyncio.run(
+        cli_module.fetch_resources(
+            "https://example.com/mcp",
+            stateless=False,
+        )
+    )
+
+    assert [prompt.name for prompt in prompts] == ["first", "second"]
+    assert [resource.name for resource in resources] == ["first", "second"]
+    assert modes == [LATEST_MODERN_VERSION, "legacy"]
