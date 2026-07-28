@@ -27,6 +27,22 @@ async def fetch_tools(url, stateless):
                 return tools
 
 
+async def fetch_tool(url, name, stateless):
+    """Connect to an MCP server and return the named tool, if it exists."""
+    cursor = None
+    mode = LATEST_MODERN_VERSION if stateless else "legacy"
+
+    async with Client(url, mode=mode) as client:
+        while True:
+            result = await client.list_tools(cursor=cursor)
+            for tool in result.tools:
+                if tool.name == name:
+                    return tool
+            cursor = result.next_cursor
+            if not cursor:
+                return None
+
+
 def _description_lines(description):
     if not description:
         return []
@@ -152,3 +168,100 @@ def list_tools(url, json_output, stateless):
         for line in _description_lines(tool.description):
             click.echo(f"  {line}")
         _render_parameters(tool.input_schema)
+
+
+def _tool_dict(tool):
+    return tool.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+
+
+def _render_json_section(label, value):
+    if value is None:
+        return
+
+    click.echo(f"{label}:")
+    for line in json.dumps(value, indent=2).splitlines():
+        click.echo(f"  {line}")
+
+
+@cli.command(name="inspect")
+@click.argument("url")
+@click.argument("tool_name")
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output the complete tool definition as JSON.",
+)
+@click.option(
+    "--stateless/--legacy",
+    default=True,
+    help="Force stateless MCP 2 (default) or the legacy initialize handshake.",
+)
+def inspect_tool(url, tool_name, json_output, stateless):
+    """Inspect one tool exposed by an MCP server at URL."""
+    try:
+        tool = asyncio.run(fetch_tool(url, tool_name, stateless))
+    except Exception as ex:
+        raise click.ClickException(str(ex)) from ex
+
+    if tool is None:
+        raise click.ClickException(f"Tool {tool_name!r} not found.")
+
+    if json_output:
+        click.echo(json.dumps(_tool_dict(tool), indent=2))
+        return
+
+    heading = tool.name
+    if tool.title:
+        heading = f"{heading} - {tool.title}"
+    click.echo(heading)
+    if tool.description:
+        for line in tool.description.strip().splitlines():
+            click.echo(f"  {line}" if line else "")
+
+    _render_json_section("Input schema", tool.input_schema)
+    _render_json_section("Output schema", tool.output_schema)
+    _render_json_section(
+        "Annotations",
+        (
+            tool.annotations.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+            if tool.annotations
+            else None
+        ),
+    )
+    _render_json_section(
+        "Execution",
+        (
+            tool.execution.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            )
+            if tool.execution
+            else None
+        ),
+    )
+    _render_json_section(
+        "Icons",
+        (
+            [
+                icon.model_dump(
+                    mode="json",
+                    by_alias=True,
+                    exclude_none=True,
+                )
+                for icon in tool.icons
+            ]
+            if tool.icons
+            else None
+        ),
+    )
+    _render_json_section("Metadata", tool.meta)

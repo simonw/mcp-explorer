@@ -35,6 +35,23 @@ schemas:
 mcp-explorer list --json https://agentic-mermaid.dev/mcp
 ```
 
+Inspect a single tool in detail:
+
+```bash
+mcp-explorer inspect https://agentic-mermaid.dev/mcp render_svg
+```
+
+This displays the tool's complete description, nested input and output schemas,
+annotations, execution metadata, icons, and `_meta`. Use `--json` for the
+complete tool definition as a single JSON object:
+
+```bash
+mcp-explorer inspect --json https://agentic-mermaid.dev/mcp render_svg
+```
+
+The `inspect` command also accepts `--legacy` to force the older
+initialize-handshake protocol.
+
 For help, run:
 
 ```bash
