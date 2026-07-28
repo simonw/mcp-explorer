@@ -18,14 +18,14 @@ pip install mcp-explorer
 List the tools exposed by a streamable HTTP MCP server:
 
 ```bash
-uv run mcp-explorer list https://agentic-mermaid.dev/mcp
+mcp-explorer list https://agentic-mermaid.dev/mcp
 ```
 
 Use `--json` to output the complete tool definitions, including their input
 schemas:
 
 ```bash
-uv run mcp-explorer list --json https://agentic-mermaid.dev/mcp
+mcp-explorer list --json https://agentic-mermaid.dev/mcp
 ```
 
 For help, run:
@@ -41,17 +41,12 @@ python -m mcp_explorer --help
 ```
 ## Development
 
-To contribute to this tool, first checkout the code. Then create a new virtual environment:
+To contribute to this tool, first checkout the code. Run the tests like this:
 ```bash
 cd mcp-explorer
-python -m venv venv
-source venv/bin/activate
+uv run pytest
 ```
-Now install the dependencies and test dependencies:
+And the development version of the tool like this:
 ```bash
-pip install -e '.[test]'
-```
-To run the tests:
-```bash
-python -m pytest
+uv run mcp-explorer --help
 ```
