@@ -78,10 +78,21 @@ mcp-explorer call URL TOOL - < arguments.json
 
 When raw JSON and `-a` are combined, individual arguments override matching top-level keys in the JSON object and later `-a` values win. Values are interpreted using the tool's input schema: strings remain literal, while numbers, booleans, arrays, objects, and null are parsed as JSON. The assembled arguments are validated against the input schema before the tool is called.
 
-Use `--json` for the complete MCP `CallToolResult`:
+Use `--json` to print the tool's `structuredContent` as JSON. If the result has no structured content, this falls back to printing the first text content block:
 
 ```bash
-mcp-explorer call URL TOOL -a name value --json
+mcp-explorer call \
+  https://datasette.simonwillison.net/-/mcp \
+  execute_sql \
+  -a database simonwillisonblog \
+  -a sql 'select count(*) from blog_entry' \
+  --json
+```
+
+Use `--raw` for the complete MCP `CallToolResult` as JSON:
+
+```bash
+mcp-explorer call URL TOOL -a name value --raw
 ```
 
 List every prompt exposed by a server:
@@ -118,7 +129,7 @@ mcp-explorer doctor https://agentic-mermaid.dev/mcp
 mcp-explorer doctor https://agentic-mermaid.dev/mcp --legacy
 ```
 
-Every command accepts `--json` and `--stateless/--legacy`. These options can appear anywhere after the command name.
+Every command accepts `--json` and `--stateless/--legacy`. These options can appear anywhere after the command name. The `call` command also accepts `--raw`.
 
 For help, run:
 

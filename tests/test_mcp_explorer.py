@@ -616,9 +616,10 @@ def test_call_with_repeated_arguments(monkeypatch):
     )
 
 
-def test_call_with_raw_json_and_json_output(monkeypatch):
+def test_call_with_json_arguments_and_json_output(monkeypatch):
     call_result = types.CallToolResult(
-        content=[types.TextContent(text="done")],
+        content=[types.TextContent(text="Found 3318 entries.")],
+        structuredContent={"database": "blog", "count": 3318},
         _meta={"requestId": "abc"},
     )
 
@@ -646,11 +647,79 @@ def test_call_with_raw_json_and_json_output(monkeypatch):
     )
 
     assert result.exit_code == 0
+    assert result.output == '{\n  "database": "blog",\n  "count": 3318\n}\n'
+
+
+def test_call_json_output_falls_back_to_first_text_content(monkeypatch):
+    async def mock_invoke_tool(*args):
+        return types.CallToolResult(
+            content=[
+                types.TextContent(text='{"status": "done"}'),
+                types.TextContent(text="ignored"),
+            ],
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == '{"status": "done"}\n'
+
+
+def test_call_with_raw_output(monkeypatch):
+    call_result = types.CallToolResult(
+        content=[types.TextContent(text="done")],
+        _meta={"requestId": "abc"},
+    )
+
+    async def mock_invoke_tool(*args):
+        return call_result
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "--raw",
+        ],
+    )
+
+    assert result.exit_code == 0
     assert json.loads(result.output) == call_result.model_dump(
         mode="json",
         by_alias=True,
         exclude_none=True,
     )
+
+
+def test_call_rejects_json_and_raw_together(monkeypatch):
+    async def mock_invoke_tool(*args):
+        raise AssertionError("Tool should not be invoked")
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "--json",
+            "--raw",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "Error: --json and --raw cannot be used together." in result.output
 
 
 def test_call_reads_raw_json_from_stdin(monkeypatch):

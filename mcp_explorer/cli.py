@@ -715,16 +715,26 @@ def _render_call_result(result):
     metavar="NAME VALUE",
     help="Set one tool argument; repeat for multiple arguments.",
 )
+@click.option(
+    "--raw",
+    "raw_output",
+    is_flag=True,
+    help="Output the complete MCP CallToolResult as JSON.",
+)
 @shared_options
 def call_command(
     url,
     tool_name,
     arguments_json,
     argument_pairs,
+    raw_output,
     json_output,
     stateless,
 ):
     """Call a tool with optional JSON and individual arguments."""
+    if json_output and raw_output:
+        raise click.UsageError("--json and --raw cannot be used together.")
+
     if arguments_json == "-":
         arguments_json = click.get_text_stream("stdin").read()
 
@@ -751,8 +761,15 @@ def call_command(
             raise click.ClickException(str(tool_error)) from ex
         raise click.ClickException(_exception_message(ex)) from ex
 
-    if json_output:
+    if raw_output:
         click.echo(json.dumps(_model_dict(result), indent=2))
+    elif json_output:
+        if result.structured_content is not None:
+            click.echo(json.dumps(result.structured_content, indent=2))
+        elif result.content and isinstance(result.content[0], types.TextContent):
+            click.echo(result.content[0].text)
+        else:
+            click.echo("null")
     else:
         _render_call_result(result)
 
