@@ -27,4 +27,4 @@ CI = "https://github.com/simonw/mcp-explorer/actions"
 mcp-explorer = "mcp_explorer.cli:cli"
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["cogapp", "pytest"]

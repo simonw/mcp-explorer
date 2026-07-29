@@ -153,3 +153,135 @@ And the development version of the tool like this:
 ```bash
 uv run mcp-explorer --help
 ```
+
+To update the `--help` reference in the README:
+
+```bash
+uv run cog -r README.md
+```
+
+## Command reference
+
+<!-- [[[cog
+import cog
+from click.testing import CliRunner
+from mcp_explorer.cli import cli
+runner = CliRunner()
+sections = []
+for command in cli.commands:
+    result = runner.invoke(cli, [command, "--help"])
+    help = result.output.replace("Usage: cli", "Usage: mcp-explorer")
+    sections.append(
+        "### `mcp-explorer {} --help`\n\n```\n{}\n```".format(command, help)
+    )
+cog.out("\n\n".join(sections))
+]]] -->
+### `mcp-explorer list --help`
+
+```
+Usage: mcp-explorer list [OPTIONS] URL
+
+  List the tools exposed by an MCP server at URL.
+
+Options:
+  -N, --no-truncate       Show full descriptions and detailed parameters.
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+
+### `mcp-explorer prompts --help`
+
+```
+Usage: mcp-explorer prompts [OPTIONS] URL
+
+  List the prompts exposed by an MCP server at URL.
+
+Options:
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+
+### `mcp-explorer resources --help`
+
+```
+Usage: mcp-explorer resources [OPTIONS] URL
+
+  List the resources exposed by an MCP server at URL.
+
+Options:
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+
+### `mcp-explorer inspect --help`
+
+```
+Usage: mcp-explorer inspect [OPTIONS] URL TOOL_NAME
+
+  Inspect one tool exposed by an MCP server at URL.
+
+Options:
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+
+### `mcp-explorer call --help`
+
+```
+Usage: mcp-explorer call [OPTIONS] URL TOOL_NAME [ARGUMENTS_JSON]
+
+  Call a tool with optional JSON and individual arguments.
+
+Options:
+  -a, --argument NAME VALUE  Set one tool argument; repeat for multiple
+                             arguments.
+  --raw                      Output the complete MCP CallToolResult as JSON.
+  --json                     Output JSON.
+  --stateless / --legacy     Force stateless MCP 2 (default) or the legacy
+                             initialize handshake.
+  --help                     Show this message and exit.
+
+```
+
+### `mcp-explorer info --help`
+
+```
+Usage: mcp-explorer info [OPTIONS] URL
+
+  Show protocol and metadata for an MCP server at URL.
+
+Options:
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+
+### `mcp-explorer doctor --help`
+
+```
+Usage: mcp-explorer doctor [OPTIONS] URL
+
+  Check stateless and legacy compatibility for an MCP server at URL.
+
+Options:
+  --json                  Output JSON.
+  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
+                          initialize handshake.
+  --help                  Show this message and exit.
+
+```
+<!-- [[[end]]] -->
