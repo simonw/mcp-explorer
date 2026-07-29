@@ -1,6 +1,6 @@
 [project]
 name = "mcp-explorer"
-version = "0.2"
+version = "0.3"
 description = "CLI tool for exploring MCP servers"
 readme = "README.md"
 authors = [{name = "Simon Willison"}]
