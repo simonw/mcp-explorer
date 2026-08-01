@@ -27,7 +27,7 @@ The default output is deliberately compact: each tool is shown as a signature an
 mcp-explorer list -N https://agentic-mermaid.dev/mcp
 ```
 
-This forces the current MCP 2 stateless protocol by default. Use `--legacy` to force the older initialize-handshake protocol instead:
+By default the protocol is negotiated automatically: the current MCP 2 stateless protocol is tried first, falling back to the older initialize-handshake protocol for servers that implement an earlier revision. Use `--stateless` to force stateless MCP 2, or `--legacy` to force the initialize handshake:
 
 ```bash
 mcp-explorer list https://agentic-mermaid.dev/mcp --legacy
@@ -122,7 +122,7 @@ mcp-explorer info https://agentic-mermaid.dev/mcp
 mcp-explorer info https://agentic-mermaid.dev/mcp --json
 ```
 
-Use `doctor` to check both stateless and legacy compatibility. The selected mode is checked first and determines the exit status:
+Use `doctor` to check both stateless and legacy compatibility. By default the server is considered healthy if either mode works; with `--stateless` or `--legacy` the selected mode is checked first and determines the exit status:
 
 ```bash
 mcp-explorer doctor https://agentic-mermaid.dev/mcp
@@ -186,8 +186,9 @@ Usage: mcp-explorer list [OPTIONS] URL
 Options:
   -N, --no-truncate       Show full descriptions and detailed parameters.
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```
@@ -201,8 +202,9 @@ Usage: mcp-explorer prompts [OPTIONS] URL
 
 Options:
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```
@@ -216,8 +218,9 @@ Usage: mcp-explorer resources [OPTIONS] URL
 
 Options:
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```
@@ -231,8 +234,9 @@ Usage: mcp-explorer inspect [OPTIONS] URL TOOL_NAME
 
 Options:
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```
@@ -249,8 +253,9 @@ Options:
                              arguments.
   --raw                      Output the complete MCP CallToolResult as JSON.
   --json                     Output JSON.
-  --stateless / --legacy     Force stateless MCP 2 (default) or the legacy
-                             initialize handshake.
+  --stateless / --legacy     Force stateless MCP 2 or the legacy initialize
+                             handshake. The default negotiates automatically,
+                             preferring stateless.
   --help                     Show this message and exit.
 
 ```
@@ -264,8 +269,9 @@ Usage: mcp-explorer info [OPTIONS] URL
 
 Options:
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```
@@ -279,8 +285,9 @@ Usage: mcp-explorer doctor [OPTIONS] URL
 
 Options:
   --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
+  --stateless / --legacy  Force stateless MCP 2 or the legacy initialize
+                          handshake. The default negotiates automatically,
+                          preferring stateless.
   --help                  Show this message and exit.
 
 ```

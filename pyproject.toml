@@ -10,7 +10,8 @@ classifiers = []
 dependencies = [
     "click",
     "jsonschema",
-    "mcp>=2.0.0"
+    "mcp>=2.0.0",
+    "pydantic"
 ]
 
 [build-system]

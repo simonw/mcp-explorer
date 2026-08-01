@@ -4,6 +4,7 @@ import time
 
 import click
 import jsonschema
+import pydantic
 from mcp import types
 from mcp.client import Client
 from mcp.types.version import LATEST_MODERN_VERSION
@@ -28,10 +29,11 @@ def shared_options(fn):
             ),
             click.option(
                 "--stateless/--legacy",
-                default=True,
+                default=None,
                 help=(
-                    "Force stateless MCP 2 (default) or the legacy "
-                    "initialize handshake."
+                    "Force stateless MCP 2 or the legacy initialize "
+                    "handshake. The default negotiates automatically, "
+                    "preferring stateless."
                 ),
             ),
         )
@@ -47,7 +49,15 @@ def cli():
 
 
 def _client_mode(stateless):
+    if stateless is None:
+        return "auto"
     return LATEST_MODERN_VERSION if stateless else "legacy"
+
+
+def _mode_name(stateless):
+    if stateless is None:
+        return "auto"
+    return "stateless" if stateless else "legacy"
 
 
 async def fetch_tools(url, stateless):
@@ -279,14 +289,19 @@ async def fetch_server_info(url, stateless):
         mode=_client_mode(stateless),
         cache=None,
     ) as client:
-        discover_result = None
         if stateless:
             discover_result = await _discover_stateless(client)
+        elif stateless is None:
+            discover_result = client.session.discover_result
+        else:
+            discover_result = None
 
         return {
             "url": url,
-            "mode": "stateless" if stateless else "legacy",
-            "negotiation": "server/discover" if stateless else "initialize",
+            "mode": _mode_name(stateless),
+            "negotiation": (
+                "server/discover" if discover_result else "initialize"
+            ),
             "protocolVersion": client.protocol_version,
             "supportedVersions": (
                 discover_result.supported_versions if discover_result else None
@@ -312,6 +327,21 @@ def _find_nested_exception(exception, exception_type):
         if match is not None:
             return match
     return None
+
+
+def _command_error(exception, stateless):
+    message = _exception_message(exception)
+    validation_error = _find_nested_exception(
+        exception,
+        pydantic.ValidationError,
+    )
+    if stateless and validation_error is not None:
+        message += (
+            "\nThis server may implement an older MCP protocol revision "
+            "that does not support stateless MCP 2. Try again without "
+            "--stateless, or with --legacy."
+        )
+    return click.ClickException(message)
 
 
 async def _doctor_mode(url, stateless, selected):
@@ -372,7 +402,7 @@ async def _doctor_mode(url, stateless, selected):
 
 async def doctor_server(url, stateless):
     """Check both protocol modes, putting the selected mode first."""
-    modes = (stateless, not stateless)
+    modes = (False, True) if stateless is False else (True, False)
     checks = await asyncio.gather(
         *(
             _doctor_mode(
@@ -383,10 +413,16 @@ async def doctor_server(url, stateless):
             for mode in modes
         )
     )
+    if stateless is None:
+        # The default auto-negotiation falls back to legacy, so the
+        # server is healthy if either mode works.
+        healthy = any(check["status"] == "ok" for check in checks)
+    else:
+        healthy = checks[0]["status"] == "ok"
     return {
         "url": url,
-        "selectedMode": "stateless" if stateless else "legacy",
-        "healthy": checks[0]["status"] == "ok",
+        "selectedMode": _mode_name(stateless),
+        "healthy": healthy,
         "checks": list(checks),
     }
 
@@ -512,7 +548,7 @@ def list_tools(url, no_truncate, json_output, stateless):
     try:
         tools = asyncio.run(fetch_tools(url, stateless))
     except Exception as ex:
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if json_output:
         click.echo(json.dumps([_tool_dict(tool) for tool in tools], indent=2))
@@ -546,7 +582,7 @@ def prompts_command(url, json_output, stateless):
     try:
         prompts = asyncio.run(fetch_prompts(url, stateless))
     except Exception as ex:
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if json_output:
         click.echo(
@@ -595,7 +631,7 @@ def resources_command(url, json_output, stateless):
     try:
         resources = asyncio.run(fetch_resources(url, stateless))
     except Exception as ex:
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if json_output:
         click.echo(
@@ -642,7 +678,7 @@ def inspect_tool(url, tool_name, json_output, stateless):
             )
         )
     except Exception as ex:
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if tool is None:
         raise click.ClickException(f"Tool {tool_name!r} not found.")
@@ -759,7 +795,7 @@ def call_command(
         tool_error = _find_nested_exception(ex, ToolNotFoundError)
         if tool_error is not None:
             raise click.ClickException(str(tool_error)) from ex
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if raw_output:
         click.echo(json.dumps(_model_dict(result), indent=2))
@@ -785,7 +821,7 @@ def info_command(url, json_output, stateless):
     try:
         info = asyncio.run(fetch_server_info(url, stateless))
     except Exception as ex:
-        raise click.ClickException(_exception_message(ex)) from ex
+        raise _command_error(ex, stateless) from ex
 
     if json_output:
         click.echo(json.dumps(info, indent=2))

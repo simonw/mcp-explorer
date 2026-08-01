@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import pydantic
 import pytest
 from click.testing import CliRunner
 from mcp import types
@@ -65,7 +66,7 @@ def test_version():
 def test_list(monkeypatch):
     async def mock_fetch_tools(url, stateless):
         assert url == "https://example.com/mcp"
-        assert stateless is True
+        assert stateless is None
         return [
             types.Tool(
                 name="get_weather",
@@ -143,7 +144,7 @@ def test_list_no_truncate(monkeypatch):
 
 def test_list_json(monkeypatch):
     async def mock_fetch_tools(url, stateless):
-        assert stateless is True
+        assert stateless is None
         return [
             types.Tool(
                 name="get_weather",
@@ -176,7 +177,7 @@ def test_list_json(monkeypatch):
 
 def test_list_with_no_tools(monkeypatch):
     async def mock_fetch_tools(url, stateless):
-        assert stateless is True
+        assert stateless is None
         return []
 
     monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
@@ -201,6 +202,58 @@ def test_legacy_option(monkeypatch):
     )
 
     assert result.exit_code == 0
+
+
+def test_stateless_option(monkeypatch):
+    async def mock_fetch_tools(url, stateless):
+        assert stateless is True
+        return []
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["list", "https://example.com/mcp", "--stateless"],
+    )
+
+    assert result.exit_code == 0
+
+
+def _validation_error():
+    class Model(pydantic.BaseModel):
+        cache_scope: str
+
+    try:
+        Model.model_validate({})
+    except pydantic.ValidationError as ex:
+        return ex
+
+
+def test_stateless_validation_error_suggests_legacy(monkeypatch):
+    async def mock_fetch_tools(url, stateless):
+        raise _validation_error()
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["list", "https://example.com/mcp", "--stateless"],
+    )
+
+    assert result.exit_code == 1
+    assert "Try again without --stateless, or with --legacy." in result.output
+
+
+def test_default_validation_error_has_no_stateless_hint(monkeypatch):
+    async def mock_fetch_tools(url, stateless):
+        raise _validation_error()
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["list", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 1
+    assert "--stateless" not in result.output
 
 
 def test_fetch_tools_forces_protocol_mode_and_follows_pagination(monkeypatch):
@@ -252,6 +305,9 @@ def test_fetch_tools_forces_protocol_mode_and_follows_pagination(monkeypatch):
     legacy_tools = asyncio.run(
         cli_module.fetch_tools("https://example.com/mcp", stateless=False)
     )
+    auto_tools = asyncio.run(
+        cli_module.fetch_tools("https://example.com/mcp", stateless=None)
+    )
     second_tool = asyncio.run(
         cli_module.fetch_tool(
             "https://example.com/mcp",
@@ -269,11 +325,13 @@ def test_fetch_tools_forces_protocol_mode_and_follows_pagination(monkeypatch):
 
     assert [tool.name for tool in tools] == ["first", "second"]
     assert [tool.name for tool in legacy_tools] == ["first", "second"]
+    assert [tool.name for tool in auto_tools] == ["first", "second"]
     assert second_tool.name == "second"
     assert missing_tool is None
     assert modes == [
         LATEST_MODERN_VERSION,
         "legacy",
+        "auto",
         LATEST_MODERN_VERSION,
         "legacy",
     ]
@@ -283,7 +341,7 @@ def test_inspect(monkeypatch):
     async def mock_fetch_tool(url, name, stateless):
         assert url == "https://example.com/mcp"
         assert name == "get_weather"
-        assert stateless is True
+        assert stateless is None
         return weather_tool()
 
     monkeypatch.setattr(cli_module, "fetch_tool", mock_fetch_tool)
@@ -400,7 +458,7 @@ def test_info(monkeypatch):
 
     async def mock_fetch_server_info(url, stateless):
         assert url == "https://example.com/mcp"
-        assert stateless is True
+        assert stateless is None
         return info
 
     monkeypatch.setattr(
@@ -483,6 +541,71 @@ def test_info_accepts_command_local_json_option(monkeypatch):
     assert json.loads(result.output) == info
 
 
+class MockAutoClient:
+    def __init__(self, url, *, mode, cache, discover_result=None):
+        assert mode == "auto"
+        assert cache is None
+        self.session = type(
+            "MockSession",
+            (),
+            {"discover_result": discover_result},
+        )()
+        self.protocol_version = (
+            discover_result.supported_versions[0]
+            if discover_result
+            else "2025-06-18"
+        )
+        self.server_info = None
+        self.server_capabilities = None
+        self.instructions = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+
+def test_fetch_server_info_auto_reports_legacy_fallback(monkeypatch):
+    monkeypatch.setattr(cli_module, "Client", MockAutoClient)
+    info = asyncio.run(
+        cli_module.fetch_server_info("https://example.com/mcp", None)
+    )
+
+    assert info["mode"] == "auto"
+    assert info["negotiation"] == "initialize"
+    assert info["protocolVersion"] == "2025-06-18"
+    assert info["supportedVersions"] is None
+
+
+def test_fetch_server_info_auto_reports_discover(monkeypatch):
+    discover_result = types.DiscoverResult(
+        supported_versions=[LATEST_MODERN_VERSION],
+        capabilities=types.ServerCapabilities(),
+        result_type="complete",
+        ttl_ms=0,
+        cache_scope="public",
+    )
+
+    def make_client(url, *, mode, cache):
+        return MockAutoClient(
+            url,
+            mode=mode,
+            cache=cache,
+            discover_result=discover_result,
+        )
+
+    monkeypatch.setattr(cli_module, "Client", make_client)
+    info = asyncio.run(
+        cli_module.fetch_server_info("https://example.com/mcp", None)
+    )
+
+    assert info["mode"] == "auto"
+    assert info["negotiation"] == "server/discover"
+    assert info["protocolVersion"] == LATEST_MODERN_VERSION
+    assert info["supportedVersions"] == [LATEST_MODERN_VERSION]
+
+
 def test_doctor(monkeypatch):
     report = {
         "url": "https://example.com/mcp",
@@ -510,7 +633,7 @@ def test_doctor(monkeypatch):
 
     async def mock_doctor_server(url, stateless):
         assert url == "https://example.com/mcp"
-        assert stateless is True
+        assert stateless is None
         return report
 
     monkeypatch.setattr(cli_module, "doctor_server", mock_doctor_server)
@@ -568,6 +691,52 @@ def test_doctor_json_exits_nonzero_when_selected_mode_fails(monkeypatch):
     assert json.loads(result.output) == report
 
 
+def test_doctor_server_auto_is_healthy_if_either_mode_works(monkeypatch):
+    async def mock_doctor_mode(url, stateless, selected):
+        return {
+            "mode": "stateless" if stateless else "legacy",
+            "selected": selected,
+            "status": "error" if stateless else "ok",
+            "latencyMs": 1.0,
+        }
+
+    monkeypatch.setattr(cli_module, "_doctor_mode", mock_doctor_mode)
+    report = asyncio.run(
+        cli_module.doctor_server("https://example.com/mcp", None)
+    )
+
+    assert report["selectedMode"] == "auto"
+    assert report["healthy"] is True
+    assert [check["mode"] for check in report["checks"]] == [
+        "stateless",
+        "legacy",
+    ]
+    assert not any(check["selected"] for check in report["checks"])
+
+
+def test_doctor_server_forced_mode_ignores_the_other_check(monkeypatch):
+    async def mock_doctor_mode(url, stateless, selected):
+        return {
+            "mode": "stateless" if stateless else "legacy",
+            "selected": selected,
+            "status": "error" if stateless else "ok",
+            "latencyMs": 1.0,
+        }
+
+    monkeypatch.setattr(cli_module, "_doctor_mode", mock_doctor_mode)
+    report = asyncio.run(
+        cli_module.doctor_server("https://example.com/mcp", True)
+    )
+
+    assert report["selectedMode"] == "stateless"
+    assert report["healthy"] is False
+    assert [check["mode"] for check in report["checks"]] == [
+        "stateless",
+        "legacy",
+    ]
+    assert [check["selected"] for check in report["checks"]] == [True, False]
+
+
 def test_call_with_repeated_arguments(monkeypatch):
     async def mock_invoke_tool(
         url,
@@ -583,7 +752,7 @@ def test_call_with_repeated_arguments(monkeypatch):
             ("source", "graph TD; A-->B"),
             ("options", '{"padding":24}'),
         )
-        assert stateless is True
+        assert stateless is None
         return types.CallToolResult(
             content=[types.TextContent(text="<svg>diagram</svg>")],
             structuredContent={"ok": True, "width": 640},
@@ -896,7 +1065,7 @@ def test_prompts(monkeypatch):
 
     async def mock_fetch_prompts(url, stateless):
         assert url == "https://example.com/mcp"
-        assert stateless is True
+        assert stateless is None
         return prompts
 
     monkeypatch.setattr(
@@ -998,7 +1167,7 @@ def test_resources(monkeypatch):
 
     async def mock_fetch_resources(url, stateless):
         assert url == "https://example.com/mcp"
-        assert stateless is True
+        assert stateless is None
         return resources
 
     monkeypatch.setattr(
