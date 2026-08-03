@@ -129,7 +129,17 @@ mcp-explorer doctor https://agentic-mermaid.dev/mcp
 mcp-explorer doctor https://agentic-mermaid.dev/mcp --legacy
 ```
 
-Every command accepts `--json` and `--stateless/--legacy`. These options can appear anywhere after the command name. The `call` command also accepts `--raw`.
+Servers that require authentication need an extra HTTP header, which you can set with `-H/--header` using the same `Name: value` syntax as `curl`. Repeat the option to send more than one header:
+
+```bash
+mcp-explorer list https://example.com/mcp -H 'Authorization: Bearer abc123'
+
+mcp-explorer call https://example.com/mcp render_svg '{"source":"graph TD; A-->B"}' \
+  -H 'Authorization: Bearer abc123' \
+  -H 'X-Tenant: acme'
+```
+
+Every command accepts `--json`, `--stateless/--legacy`, and `-H/--header`. These options can appear anywhere after the command name. The `call` command also accepts `--raw`.
 
 For help, run:
 
@@ -184,11 +194,13 @@ Usage: mcp-explorer list [OPTIONS] URL
   List the tools exposed by an MCP server at URL.
 
 Options:
-  -N, --no-truncate       Show full descriptions and detailed parameters.
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  -N, --no-truncate        Show full descriptions and detailed parameters.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 
@@ -200,10 +212,12 @@ Usage: mcp-explorer prompts [OPTIONS] URL
   List the prompts exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 
@@ -215,10 +229,12 @@ Usage: mcp-explorer resources [OPTIONS] URL
   List the resources exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 
@@ -230,10 +246,12 @@ Usage: mcp-explorer inspect [OPTIONS] URL TOOL_NAME
   Inspect one tool exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 
@@ -251,6 +269,8 @@ Options:
   --json                     Output JSON.
   --stateless / --legacy     Force stateless MCP 2 (default) or the legacy
                              initialize handshake.
+  -H, --header NAME:VALUE    Send an extra HTTP header; repeat for multiple
+                             headers.
   --help                     Show this message and exit.
 
 ```
@@ -263,10 +283,12 @@ Usage: mcp-explorer info [OPTIONS] URL
   Show protocol and metadata for an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 
@@ -278,10 +300,12 @@ Usage: mcp-explorer doctor [OPTIONS] URL
   Check stateless and legacy compatibility for an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  -H, --header NAME:VALUE  Send an extra HTTP header; repeat for multiple
+                           headers.
+  --help                   Show this message and exit.
 
 ```
 <!-- [[[end]]] -->

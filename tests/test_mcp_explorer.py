@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+import click
 import pytest
 from click.testing import CliRunner
 from mcp import types
@@ -63,7 +64,7 @@ def test_version():
 
 
 def test_list(monkeypatch):
-    async def mock_fetch_tools(url, stateless):
+    async def mock_fetch_tools(url, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert stateless is True
         return [
@@ -101,7 +102,7 @@ def test_list(monkeypatch):
 
 
 def test_list_no_truncate(monkeypatch):
-    async def mock_fetch_tools(url, stateless):
+    async def mock_fetch_tools(url, stateless, headers=None):
         return [
             types.Tool(
                 name="get_weather",
@@ -142,7 +143,7 @@ def test_list_no_truncate(monkeypatch):
 
 
 def test_list_json(monkeypatch):
-    async def mock_fetch_tools(url, stateless):
+    async def mock_fetch_tools(url, stateless, headers=None):
         assert stateless is True
         return [
             types.Tool(
@@ -175,7 +176,7 @@ def test_list_json(monkeypatch):
 
 
 def test_list_with_no_tools(monkeypatch):
-    async def mock_fetch_tools(url, stateless):
+    async def mock_fetch_tools(url, stateless, headers=None):
         assert stateless is True
         return []
 
@@ -190,7 +191,7 @@ def test_list_with_no_tools(monkeypatch):
 
 
 def test_legacy_option(monkeypatch):
-    async def mock_fetch_tools(url, stateless):
+    async def mock_fetch_tools(url, stateless, headers=None):
         assert stateless is False
         return []
 
@@ -280,7 +281,7 @@ def test_fetch_tools_forces_protocol_mode_and_follows_pagination(monkeypatch):
 
 
 def test_inspect(monkeypatch):
-    async def mock_fetch_tool(url, name, stateless):
+    async def mock_fetch_tool(url, name, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert name == "get_weather"
         assert stateless is True
@@ -311,7 +312,7 @@ def test_inspect(monkeypatch):
 
 
 def test_inspect_json_and_legacy(monkeypatch):
-    async def mock_fetch_tool(url, name, stateless):
+    async def mock_fetch_tool(url, name, stateless, headers=None):
         assert stateless is False
         return weather_tool()
 
@@ -336,7 +337,7 @@ def test_inspect_json_and_legacy(monkeypatch):
 
 
 def test_inspect_missing_tool(monkeypatch):
-    async def mock_fetch_tool(url, name, stateless):
+    async def mock_fetch_tool(url, name, stateless, headers=None):
         return None
 
     monkeypatch.setattr(cli_module, "fetch_tool", mock_fetch_tool)
@@ -398,7 +399,7 @@ def test_info(monkeypatch):
         "instructions": "Use carefully.",
     }
 
-    async def mock_fetch_server_info(url, stateless):
+    async def mock_fetch_server_info(url, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert stateless is True
         return info
@@ -436,7 +437,7 @@ def test_info_json_and_legacy(monkeypatch):
         "instructions": None,
     }
 
-    async def mock_fetch_server_info(url, stateless):
+    async def mock_fetch_server_info(url, stateless, headers=None):
         assert stateless is False
         return info
 
@@ -466,7 +467,7 @@ def test_info_accepts_command_local_json_option(monkeypatch):
         "instructions": None,
     }
 
-    async def mock_fetch_server_info(url, stateless):
+    async def mock_fetch_server_info(url, stateless, headers=None):
         return info
 
     monkeypatch.setattr(
@@ -508,7 +509,7 @@ def test_doctor(monkeypatch):
         ],
     }
 
-    async def mock_doctor_server(url, stateless):
+    async def mock_doctor_server(url, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert stateless is True
         return report
@@ -554,7 +555,7 @@ def test_doctor_json_exits_nonzero_when_selected_mode_fails(monkeypatch):
         ],
     }
 
-    async def mock_doctor_server(url, stateless):
+    async def mock_doctor_server(url, stateless, headers=None):
         assert stateless is False
         return report
 
@@ -575,6 +576,7 @@ def test_call_with_repeated_arguments(monkeypatch):
         arguments_json,
         argument_pairs,
         stateless,
+        headers=None,
     ):
         assert url == "https://example.com/mcp"
         assert tool_name == "render_svg"
@@ -629,6 +631,7 @@ def test_call_with_json_arguments_and_json_output(monkeypatch):
         arguments_json,
         argument_pairs,
         stateless,
+        headers=None,
     ):
         assert arguments_json == '{"source":"graph TD; A-->B"}'
         assert argument_pairs == ()
@@ -729,6 +732,7 @@ def test_call_reads_raw_json_from_stdin(monkeypatch):
         arguments_json,
         argument_pairs,
         stateless,
+        headers=None,
     ):
         assert arguments_json == '{"source":"from stdin"}\n'
         return types.CallToolResult(
@@ -894,7 +898,7 @@ def test_prompts(monkeypatch):
         types.Prompt(name="summarize"),
     ]
 
-    async def mock_fetch_prompts(url, stateless):
+    async def mock_fetch_prompts(url, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert stateless is True
         return prompts
@@ -932,7 +936,7 @@ def test_prompts_command_local_json_and_legacy(monkeypatch):
         )
     ]
 
-    async def mock_fetch_prompts(url, stateless):
+    async def mock_fetch_prompts(url, stateless, headers=None):
         assert stateless is False
         return prompts
 
@@ -963,7 +967,7 @@ def test_prompts_command_local_json_and_legacy(monkeypatch):
 
 
 def test_prompts_with_no_prompts(monkeypatch):
-    async def mock_fetch_prompts(url, stateless):
+    async def mock_fetch_prompts(url, stateless, headers=None):
         return []
 
     monkeypatch.setattr(
@@ -996,7 +1000,7 @@ def test_resources(monkeypatch):
         ),
     ]
 
-    async def mock_fetch_resources(url, stateless):
+    async def mock_fetch_resources(url, stateless, headers=None):
         assert url == "https://example.com/mcp"
         assert stateless is True
         return resources
@@ -1032,7 +1036,7 @@ def test_resources_respect_shared_json_and_legacy(monkeypatch):
         )
     ]
 
-    async def mock_fetch_resources(url, stateless):
+    async def mock_fetch_resources(url, stateless, headers=None):
         assert stateless is False
         return resources
 
@@ -1070,7 +1074,7 @@ def test_resources_accept_command_local_json_and_legacy(monkeypatch):
         )
     ]
 
-    async def mock_fetch_resources(url, stateless):
+    async def mock_fetch_resources(url, stateless, headers=None):
         assert stateless is False
         return resources
 
@@ -1155,3 +1159,145 @@ def test_prompt_and_resource_fetchers_follow_pagination(monkeypatch):
     assert [prompt.name for prompt in prompts] == ["first", "second"]
     assert [resource.name for resource in resources] == ["first", "second"]
     assert modes == [LATEST_MODERN_VERSION, "legacy"]
+
+
+def test_parse_headers():
+    assert cli_module.parse_headers([]) == {}
+    assert cli_module.parse_headers(
+        ["Authorization: Bearer abc123", "X-Trace:  42  "]
+    ) == {"Authorization": "Bearer abc123", "X-Trace": "42"}
+    # Values may themselves contain colons
+    assert cli_module.parse_headers(["X-Url: https://example.com/mcp"]) == {
+        "X-Url": "https://example.com/mcp"
+    }
+
+
+@pytest.mark.parametrize("invalid", ["Authorization", "", ": value"])
+def test_parse_headers_rejects_invalid(invalid):
+    with pytest.raises(click.UsageError) as excinfo:
+        cli_module.parse_headers([invalid])
+    assert "expected the format 'Name: value'" in str(excinfo.value)
+
+
+def test_header_option_reaches_fetcher(monkeypatch):
+    captured = {}
+
+    async def mock_fetch_tools(url, stateless, headers=None):
+        captured["headers"] = headers
+        return []
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "list",
+            "https://example.com/mcp",
+            "-H",
+            "Authorization: Bearer abc123",
+            "--header",
+            "X-Tenant: acme",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["headers"] == {
+        "Authorization": "Bearer abc123",
+        "X-Tenant": "acme",
+    }
+
+
+def test_invalid_header_is_a_usage_error(monkeypatch):
+    async def mock_fetch_tools(url, stateless, headers=None):  # pragma: no cover
+        raise AssertionError("should not connect")
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["list", "https://example.com/mcp", "-H", "Authorization"],
+    )
+
+    assert result.exit_code == 2
+    assert "expected the format 'Name: value'" in result.output
+
+
+def test_connect_without_headers_uses_url_directly(monkeypatch):
+    seen = []
+
+    class MockClient:
+        def __init__(self, server, *, mode):
+            seen.append((server, mode))
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    def unexpected_factory(**kwargs):  # pragma: no cover
+        raise AssertionError("no HTTP client should be built without headers")
+
+    monkeypatch.setattr(cli_module, "Client", MockClient)
+    monkeypatch.setattr(cli_module, "create_mcp_http_client", unexpected_factory)
+
+    async def run():
+        async with cli_module.connect("https://example.com/mcp", True):
+            pass
+
+    asyncio.run(run())
+
+    assert seen == [("https://example.com/mcp", LATEST_MODERN_VERSION)]
+
+
+def test_connect_with_headers_builds_http_client(monkeypatch):
+    captured = {}
+
+    class MockHttpClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    http_client = MockHttpClient()
+
+    def mock_factory(*, headers):
+        captured["headers"] = headers
+        return http_client
+
+    def mock_transport(url, *, http_client):
+        captured["url"] = url
+        captured["http_client"] = http_client
+        return "transport"
+
+    class MockClient:
+        def __init__(self, server, *, mode):
+            captured["server"] = server
+            captured["mode"] = mode
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    monkeypatch.setattr(cli_module, "Client", MockClient)
+    monkeypatch.setattr(cli_module, "create_mcp_http_client", mock_factory)
+    monkeypatch.setattr(cli_module, "streamable_http_client", mock_transport)
+
+    async def run():
+        async with cli_module.connect(
+            "https://example.com/mcp",
+            False,
+            {"Authorization": "Bearer abc123"},
+        ):
+            pass
+
+    asyncio.run(run())
+
+    assert captured == {
+        "headers": {"Authorization": "Bearer abc123"},
+        "url": "https://example.com/mcp",
+        "http_client": http_client,
+        "server": "transport",
+        "mode": "legacy",
+    }
