@@ -95,6 +95,31 @@ Use `--raw` for the complete MCP `CallToolResult` as JSON:
 mcp-explorer call URL TOOL -a name value --raw
 ```
 
+Connect to servers that require request headers (for example bearer token auth):
+
+```bash
+mcp-explorer list https://example.com/mcp --bearer-token "$MCP_TOKEN"
+```
+
+You can also load the token from an environment variable. By default, commands use `MCP_EXPLORER_BEARER_TOKEN` if it is set:
+
+```bash
+set MCP_EXPLORER_BEARER_TOKEN=your-token
+mcp-explorer info https://example.com/mcp
+```
+
+Override the environment variable name if needed:
+
+```bash
+mcp-explorer list https://example.com/mcp --bearer-token-env MY_CUSTOM_TOKEN_VAR
+```
+
+Add custom headers with repeatable `--header NAME VALUE` options:
+
+```bash
+mcp-explorer call URL TOOL --header X-Tenant acme --header X-Trace debug
+```
+
 List every prompt exposed by a server:
 
 ```bash
@@ -129,7 +154,7 @@ mcp-explorer doctor https://agentic-mermaid.dev/mcp
 mcp-explorer doctor https://agentic-mermaid.dev/mcp --legacy
 ```
 
-Every command accepts `--json` and `--stateless/--legacy`. These options can appear anywhere after the command name. The `call` command also accepts `--raw`.
+Every command accepts `--json`, `--stateless/--legacy`, `--header`, `--bearer-token`, and `--bearer-token-env`. These options can appear anywhere after the command name. The `call` command also accepts `--raw`.
 
 For help, run:
 
@@ -184,11 +209,16 @@ Usage: mcp-explorer list [OPTIONS] URL
   List the tools exposed by an MCP server at URL.
 
 Options:
-  -N, --no-truncate       Show full descriptions and detailed parameters.
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  -N, --no-truncate        Show full descriptions and detailed parameters.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 
@@ -200,10 +230,15 @@ Usage: mcp-explorer prompts [OPTIONS] URL
   List the prompts exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 
@@ -215,10 +250,15 @@ Usage: mcp-explorer resources [OPTIONS] URL
   List the resources exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 
@@ -230,10 +270,15 @@ Usage: mcp-explorer inspect [OPTIONS] URL TOOL_NAME
   Inspect one tool exposed by an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 
@@ -251,6 +296,11 @@ Options:
   --json                     Output JSON.
   --stateless / --legacy     Force stateless MCP 2 (default) or the legacy
                              initialize handshake.
+  --header NAME VALUE        Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT        Bearer token used for Authorization header.
+  --bearer-token-env TEXT    Environment variable name to read bearer token from
+                             when --bearer-token is not provided.  [default:
+                             MCP_EXPLORER_BEARER_TOKEN]
   --help                     Show this message and exit.
 
 ```
@@ -263,10 +313,15 @@ Usage: mcp-explorer info [OPTIONS] URL
   Show protocol and metadata for an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 
@@ -278,10 +333,15 @@ Usage: mcp-explorer doctor [OPTIONS] URL
   Check stateless and legacy compatibility for an MCP server at URL.
 
 Options:
-  --json                  Output JSON.
-  --stateless / --legacy  Force stateless MCP 2 (default) or the legacy
-                          initialize handshake.
-  --help                  Show this message and exit.
+  --json                   Output JSON.
+  --stateless / --legacy   Force stateless MCP 2 (default) or the legacy
+                           initialize handshake.
+  --header NAME VALUE      Add an HTTP header; repeat for multiple headers.
+  --bearer-token TEXT      Bearer token used for Authorization header.
+  --bearer-token-env TEXT  Environment variable name to read bearer token from
+                           when --bearer-token is not provided.  [default:
+                           MCP_EXPLORER_BEARER_TOKEN]
+  --help                   Show this message and exit.
 
 ```
 <!-- [[[end]]] -->

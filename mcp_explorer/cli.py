@@ -1,11 +1,15 @@
 import asyncio
+import os
 import json
 import time
+from contextlib import AsyncExitStack, asynccontextmanager
 
 import click
 import jsonschema
 from mcp import types
 from mcp.client import Client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import create_mcp_http_client
 from mcp.types.version import LATEST_MODERN_VERSION
 
 
@@ -15,6 +19,67 @@ class ArgumentInputError(ValueError):
 
 class ToolNotFoundError(ValueError):
     pass
+
+
+def _resolve_request_headers(
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
+    headers = {}
+    lower_name_to_original = {}
+
+    for raw_name, raw_value in header_pairs:
+        name = raw_name.strip()
+        if not name:
+            raise ArgumentInputError("Header name cannot be empty")
+        if ":" in name:
+            raise ArgumentInputError(
+                f"Header name {raw_name!r} is invalid: ':' is not allowed"
+            )
+
+        lowered = name.lower()
+        previous_name = lower_name_to_original.get(lowered)
+        if previous_name is not None and previous_name != name:
+            headers.pop(previous_name, None)
+
+        headers[name] = raw_value
+        lower_name_to_original[lowered] = name
+
+    token = bearer_token
+    if token is None and bearer_token_env:
+        token = os.environ.get(bearer_token_env)
+
+    if token is not None:
+        token = token.strip()
+        if not token:
+            raise ArgumentInputError("Bearer token cannot be empty")
+
+        existing_auth = lower_name_to_original.get("authorization")
+        if existing_auth is not None:
+            headers.pop(existing_auth, None)
+
+        headers["Authorization"] = f"Bearer {token}"
+
+    return headers or None
+
+
+@asynccontextmanager
+async def _connect_client(url, stateless, request_headers=None, cache=...):
+    async with AsyncExitStack() as stack:
+        server = url
+        if request_headers:
+            http_client = create_mcp_http_client(headers=request_headers)
+            await stack.enter_async_context(http_client)
+            server = streamable_http_client(url, http_client=http_client)
+
+        client_kwargs = {"mode": _client_mode(stateless)}
+        if cache is not ...:
+            client_kwargs["cache"] = cache
+
+        client = Client(server, **client_kwargs)
+        connected_client = await stack.enter_async_context(client)
+        yield connected_client
 
 
 def shared_options(fn):
@@ -34,6 +99,27 @@ def shared_options(fn):
                     "initialize handshake."
                 ),
             ),
+            click.option(
+                "--header",
+                "header_pairs",
+                nargs=2,
+                multiple=True,
+                metavar="NAME VALUE",
+                help="Add an HTTP header; repeat for multiple headers.",
+            ),
+            click.option(
+                "--bearer-token",
+                help="Bearer token used for Authorization header.",
+            ),
+            click.option(
+                "--bearer-token-env",
+                default="MCP_EXPLORER_BEARER_TOKEN",
+                show_default=True,
+                help=(
+                    "Environment variable name to read bearer token from "
+                    "when --bearer-token is not provided."
+                ),
+            ),
         )
     ):
         fn = decorator(fn)
@@ -50,12 +136,12 @@ def _client_mode(stateless):
     return LATEST_MODERN_VERSION if stateless else "legacy"
 
 
-async def fetch_tools(url, stateless):
+async def fetch_tools(url, stateless, request_headers=None):
     """Connect to an MCP server and return all of its tools."""
     tools = []
     cursor = None
 
-    async with Client(url, mode=_client_mode(stateless)) as client:
+    async with _connect_client(url, stateless, request_headers=request_headers) as client:
         while True:
             result = await client.list_tools(cursor=cursor)
             tools.extend(result.tools)
@@ -64,12 +150,12 @@ async def fetch_tools(url, stateless):
                 return tools
 
 
-async def fetch_prompts(url, stateless):
+async def fetch_prompts(url, stateless, request_headers=None):
     """Connect to an MCP server and return all of its prompts."""
     prompts = []
     cursor = None
 
-    async with Client(url, mode=_client_mode(stateless)) as client:
+    async with _connect_client(url, stateless, request_headers=request_headers) as client:
         while True:
             result = await client.list_prompts(cursor=cursor)
             prompts.extend(result.prompts)
@@ -78,12 +164,12 @@ async def fetch_prompts(url, stateless):
                 return prompts
 
 
-async def fetch_resources(url, stateless):
+async def fetch_resources(url, stateless, request_headers=None):
     """Connect to an MCP server and return all of its resources."""
     resources = []
     cursor = None
 
-    async with Client(url, mode=_client_mode(stateless)) as client:
+    async with _connect_client(url, stateless, request_headers=request_headers) as client:
         while True:
             result = await client.list_resources(cursor=cursor)
             resources.extend(result.resources)
@@ -92,9 +178,9 @@ async def fetch_resources(url, stateless):
                 return resources
 
 
-async def fetch_tool(url, name, stateless):
+async def fetch_tool(url, name, stateless, request_headers=None):
     """Connect to an MCP server and return the named tool, if it exists."""
-    async with Client(url, mode=_client_mode(stateless)) as client:
+    async with _connect_client(url, stateless, request_headers=request_headers) as client:
         return await _find_tool(client, name)
 
 
@@ -241,9 +327,10 @@ async def invoke_tool(
     arguments_json,
     argument_pairs,
     stateless,
+    request_headers=None,
 ):
     """Find, validate, and invoke a tool using one MCP connection."""
-    async with Client(url, mode=_client_mode(stateless)) as client:
+    async with _connect_client(url, stateless, request_headers=request_headers) as client:
         tool = await _find_tool(client, tool_name)
         if tool is None:
             raise ToolNotFoundError(f"Tool {tool_name!r} not found.")
@@ -272,11 +359,12 @@ def _model_dict(model):
     )
 
 
-async def fetch_server_info(url, stateless):
+async def fetch_server_info(url, stateless, request_headers=None):
     """Return protocol and server metadata for the selected mode."""
-    async with Client(
+    async with _connect_client(
         url,
-        mode=_client_mode(stateless),
+        stateless,
+        request_headers=request_headers,
         cache=None,
     ) as client:
         discover_result = None
@@ -314,14 +402,15 @@ def _find_nested_exception(exception, exception_type):
     return None
 
 
-async def _doctor_mode(url, stateless, selected):
+async def _doctor_mode(url, stateless, selected, request_headers=None):
     started = time.perf_counter()
     mode_name = "stateless" if stateless else "legacy"
 
     try:
-        async with Client(
+        async with _connect_client(
             url,
-            mode=_client_mode(stateless),
+            stateless,
+            request_headers=request_headers,
             cache=None,
         ) as client:
             if stateless:
@@ -370,7 +459,7 @@ async def _doctor_mode(url, stateless, selected):
         }
 
 
-async def doctor_server(url, stateless):
+async def doctor_server(url, stateless, request_headers=None):
     """Check both protocol modes, putting the selected mode first."""
     modes = (stateless, not stateless)
     checks = await asyncio.gather(
@@ -379,6 +468,7 @@ async def doctor_server(url, stateless):
                 url,
                 mode,
                 selected=(mode == stateless),
+                request_headers=request_headers,
             )
             for mode in modes
         )
@@ -507,10 +597,28 @@ def _render_json_section(label, value):
     help="Show full descriptions and detailed parameters.",
 )
 @shared_options
-def list_tools(url, no_truncate, json_output, stateless):
+def list_tools(
+    url,
+    no_truncate,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """List the tools exposed by an MCP server at URL."""
     try:
-        tools = asyncio.run(fetch_tools(url, stateless))
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
+        )
+        if request_headers is None:
+            tools = asyncio.run(fetch_tools(url, stateless))
+        else:
+            tools = asyncio.run(fetch_tools(url, stateless, request_headers))
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
@@ -541,10 +649,27 @@ def list_tools(url, no_truncate, json_output, stateless):
 @cli.command(name="prompts")
 @click.argument("url")
 @shared_options
-def prompts_command(url, json_output, stateless):
+def prompts_command(
+    url,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """List the prompts exposed by an MCP server at URL."""
     try:
-        prompts = asyncio.run(fetch_prompts(url, stateless))
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
+        )
+        if request_headers is None:
+            prompts = asyncio.run(fetch_prompts(url, stateless))
+        else:
+            prompts = asyncio.run(fetch_prompts(url, stateless, request_headers))
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
@@ -590,10 +715,27 @@ def prompts_command(url, json_output, stateless):
 @cli.command(name="resources")
 @click.argument("url")
 @shared_options
-def resources_command(url, json_output, stateless):
+def resources_command(
+    url,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """List the resources exposed by an MCP server at URL."""
     try:
-        resources = asyncio.run(fetch_resources(url, stateless))
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
+        )
+        if request_headers is None:
+            resources = asyncio.run(fetch_resources(url, stateless))
+        else:
+            resources = asyncio.run(fetch_resources(url, stateless, request_headers))
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
@@ -631,16 +773,41 @@ def resources_command(url, json_output, stateless):
 @click.argument("url")
 @click.argument("tool_name")
 @shared_options
-def inspect_tool(url, tool_name, json_output, stateless):
+def inspect_tool(
+    url,
+    tool_name,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """Inspect one tool exposed by an MCP server at URL."""
     try:
-        tool = asyncio.run(
-            fetch_tool(
-                url,
-                tool_name,
-                stateless,
-            )
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
         )
+        if request_headers is None:
+            tool = asyncio.run(
+                fetch_tool(
+                    url,
+                    tool_name,
+                    stateless,
+                )
+            )
+        else:
+            tool = asyncio.run(
+                fetch_tool(
+                    url,
+                    tool_name,
+                    stateless,
+                    request_headers,
+                )
+            )
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
@@ -730,6 +897,9 @@ def call_command(
     raw_output,
     json_output,
     stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
 ):
     """Call a tool with optional JSON and individual arguments."""
     if json_output and raw_output:
@@ -739,15 +909,32 @@ def call_command(
         arguments_json = click.get_text_stream("stdin").read()
 
     try:
-        result = asyncio.run(
-            invoke_tool(
-                url,
-                tool_name,
-                arguments_json,
-                argument_pairs,
-                stateless,
-            )
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
         )
+        if request_headers is None:
+            result = asyncio.run(
+                invoke_tool(
+                    url,
+                    tool_name,
+                    arguments_json,
+                    argument_pairs,
+                    stateless,
+                )
+            )
+        else:
+            result = asyncio.run(
+                invoke_tool(
+                    url,
+                    tool_name,
+                    arguments_json,
+                    argument_pairs,
+                    stateless,
+                    request_headers,
+                )
+            )
     except ArgumentInputError as ex:
         raise click.UsageError(str(ex)) from ex
     except ToolNotFoundError as ex:
@@ -780,10 +967,27 @@ def call_command(
 @cli.command(name="info")
 @click.argument("url")
 @shared_options
-def info_command(url, json_output, stateless):
+def info_command(
+    url,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """Show protocol and metadata for an MCP server at URL."""
     try:
-        info = asyncio.run(fetch_server_info(url, stateless))
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
+        )
+        if request_headers is None:
+            info = asyncio.run(fetch_server_info(url, stateless))
+        else:
+            info = asyncio.run(fetch_server_info(url, stateless, request_headers))
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
     except Exception as ex:
         raise click.ClickException(_exception_message(ex)) from ex
 
@@ -832,9 +1036,27 @@ def _render_doctor(report):
 @cli.command(name="doctor")
 @click.argument("url")
 @shared_options
-def doctor_command(url, json_output, stateless):
+def doctor_command(
+    url,
+    json_output,
+    stateless,
+    header_pairs,
+    bearer_token,
+    bearer_token_env,
+):
     """Check stateless and legacy compatibility for an MCP server at URL."""
-    report = asyncio.run(doctor_server(url, stateless))
+    try:
+        request_headers = _resolve_request_headers(
+            header_pairs,
+            bearer_token,
+            bearer_token_env,
+        )
+        if request_headers is None:
+            report = asyncio.run(doctor_server(url, stateless))
+        else:
+            report = asyncio.run(doctor_server(url, stateless, request_headers))
+    except ArgumentInputError as ex:
+        raise click.UsageError(str(ex)) from ex
 
     if json_output:
         click.echo(json.dumps(report, indent=2))

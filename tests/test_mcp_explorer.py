@@ -370,6 +370,9 @@ def test_shared_options_are_only_on_commands():
         assert command_help.exit_code == 0
         assert "--json" in command_help.output
         assert "--stateless / --legacy" in command_help.output
+        assert "--header NAME VALUE" in command_help.output
+        assert "--bearer-token TEXT" in command_help.output
+        assert "--bearer-token-env TEXT" in command_help.output
 
 
 @pytest.mark.parametrize("option", ("--json", "--legacy", "--stateless"))
@@ -616,6 +619,82 @@ def test_call_with_repeated_arguments(monkeypatch):
     )
 
 
+def test_call_with_bearer_token_env_forwards_authorization_header(monkeypatch):
+    async def mock_invoke_tool(
+        url,
+        tool_name,
+        arguments_json,
+        argument_pairs,
+        stateless,
+        request_headers,
+    ):
+        assert url == "https://example.com/mcp"
+        assert tool_name == "render_svg"
+        assert stateless is True
+        assert request_headers == {"Authorization": "Bearer from-env-token"}
+        return types.CallToolResult(
+            content=[types.TextContent(text="ok")],
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+        ],
+        env={"MCP_EXPLORER_BEARER_TOKEN": "from-env-token"},
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "ok\n"
+
+
+def test_list_with_header_and_bearer_token_passes_resolved_headers(monkeypatch):
+    async def mock_fetch_tools(url, stateless, request_headers):
+        assert url == "https://example.com/mcp"
+        assert stateless is True
+        assert request_headers == {
+            "X-Customer": "northwind",
+            "Authorization": "Bearer cli-token",
+        }
+        return []
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "list",
+            "https://example.com/mcp",
+            "--header",
+            "X-Customer",
+            "northwind",
+            "--bearer-token",
+            "cli-token",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "No tools available.\n"
+
+
+def test_list_rejects_invalid_header_name():
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "list",
+            "https://example.com/mcp",
+            "--header",
+            "bad:name",
+            "value",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "invalid: ':' is not allowed" in result.output
+
+
 def test_call_with_json_arguments_and_json_output(monkeypatch):
     call_result = types.CallToolResult(
         content=[types.TextContent(text="Found 3318 entries.")],
@@ -783,6 +862,34 @@ def test_build_arguments_uses_schema_types_and_overrides_raw_json():
         "options": {"padding": 24},
         "tags": ["one", "two"],
     }
+
+
+def test_resolve_request_headers_uses_bearer_token_and_overrides_authorization():
+    headers = cli_module._resolve_request_headers(
+        (
+            ("Authorization", "Bearer old"),
+            ("X-Test", "1"),
+        ),
+        "new-token",
+        "MCP_EXPLORER_BEARER_TOKEN",
+    )
+
+    assert headers == {
+        "X-Test": "1",
+        "Authorization": "Bearer new-token",
+    }
+
+
+def test_resolve_request_headers_reads_env_when_token_not_provided(monkeypatch):
+    monkeypatch.setenv("MCP_TOKEN", "env-token")
+
+    headers = cli_module._resolve_request_headers(
+        (),
+        None,
+        "MCP_TOKEN",
+    )
+
+    assert headers == {"Authorization": "Bearer env-token"}
 
 
 @pytest.mark.parametrize(
