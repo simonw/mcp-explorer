@@ -141,6 +141,51 @@ def test_list_no_truncate(monkeypatch):
     )
 
 
+def test_list_handles_non_object_subschemas(monkeypatch):
+    async def mock_fetch_tools(url, stateless):
+        return [
+            types.Tool(
+                name="odd_schemas",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "anything": True,
+                        "pair": {
+                            "type": "array",
+                            "items": [{"type": "string"}, {"type": "number"}],
+                        },
+                    },
+                },
+            )
+        ]
+
+    monkeypatch.setattr(cli_module, "fetch_tools", mock_fetch_tools)
+    runner = CliRunner()
+    compact = runner.invoke(cli_module.cli, ["list", "https://example.com/mcp"])
+    detailed = runner.invoke(cli_module.cli, ["list", "-N", "https://example.com/mcp"])
+
+    assert compact.exit_code == 0
+    assert compact.output == "odd_schemas(anything?: value, pair?: array[value])\n"
+    assert detailed.exit_code == 0
+    assert detailed.output == (
+        "odd_schemas\n"
+        "  Parameters:\n"
+        "    anything (value, optional)\n"
+        "    pair (array[value], optional)\n"
+    )
+
+
+def test_build_arguments_handles_non_object_subschemas():
+    schema = {
+        "type": "object",
+        "properties": {"anything": True},
+    }
+
+    assert cli_module.build_arguments(schema, None, (("anything", "text"),)) == {
+        "anything": "text"
+    }
+
+
 def test_list_json(monkeypatch):
     async def mock_fetch_tools(url, stateless):
         assert stateless is True
@@ -277,6 +322,83 @@ def test_fetch_tools_forces_protocol_mode_and_follows_pagination(monkeypatch):
         LATEST_MODERN_VERSION,
         "legacy",
     ]
+
+
+class LoopingCursorClient:
+    """A server that keeps handing back the same pagination cursor."""
+
+    def __init__(self, url, *, mode):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def list_tools(self, *, cursor):
+        return types.ListToolsResult(
+            tools=[types.Tool(name="looping", inputSchema={"type": "object"})],
+            nextCursor="stuck",
+        )
+
+    async def list_prompts(self, *, cursor):
+        return types.ListPromptsResult(
+            prompts=[types.Prompt(name="looping")],
+            nextCursor="stuck",
+        )
+
+    async def list_resources(self, *, cursor):
+        return types.ListResourcesResult(
+            resources=[types.Resource(name="looping", uri="test://looping")],
+            nextCursor="stuck",
+        )
+
+
+@pytest.mark.parametrize(
+    "fetcher",
+    ("fetch_tools", "fetch_prompts", "fetch_resources"),
+)
+def test_fetchers_reject_a_repeated_pagination_cursor(monkeypatch, fetcher):
+    monkeypatch.setattr(cli_module, "Client", LoopingCursorClient)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Server repeated pagination cursor 'stuck'",
+    ):
+        asyncio.run(
+            getattr(cli_module, fetcher)(
+                "https://example.com/mcp",
+                stateless=True,
+            )
+        )
+
+
+def test_fetch_tool_rejects_a_repeated_pagination_cursor(monkeypatch):
+    monkeypatch.setattr(cli_module, "Client", LoopingCursorClient)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Server repeated pagination cursor 'stuck'",
+    ):
+        asyncio.run(
+            cli_module.fetch_tool(
+                "https://example.com/mcp",
+                "missing",
+                stateless=True,
+            )
+        )
+
+
+def test_list_reports_a_repeated_pagination_cursor(monkeypatch):
+    monkeypatch.setattr(cli_module, "Client", LoopingCursorClient)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        ["list", "https://example.com/mcp"],
+    )
+
+    assert result.exit_code == 1
+    assert result.output == "Error: Server repeated pagination cursor 'stuck'\n"
 
 
 def test_inspect(monkeypatch):
@@ -672,6 +794,51 @@ def test_call_json_output_falls_back_to_first_text_content(monkeypatch):
 
     assert result.exit_code == 0
     assert result.output == '{"status": "done"}\n'
+
+
+def test_call_json_output_skips_leading_non_text_content(monkeypatch):
+    async def mock_invoke_tool(*args):
+        return types.CallToolResult(
+            content=[
+                types.ImageContent(data="aGk=", mimeType="image/png"),
+                types.TextContent(text='{"status": "done"}'),
+            ],
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == '{"status": "done"}\n'
+
+
+def test_call_json_output_is_null_without_text_content(monkeypatch):
+    async def mock_invoke_tool(*args):
+        return types.CallToolResult(
+            content=[types.ImageContent(data="aGk=", mimeType="image/png")],
+        )
+
+    monkeypatch.setattr(cli_module, "invoke_tool", mock_invoke_tool)
+    result = CliRunner().invoke(
+        cli_module.cli,
+        [
+            "call",
+            "https://example.com/mcp",
+            "render_svg",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert result.output == "null\n"
 
 
 def test_call_with_raw_output(monkeypatch):
