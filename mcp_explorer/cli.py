@@ -50,16 +50,28 @@ def _client_mode(stateless):
     return LATEST_MODERN_VERSION if stateless else "legacy"
 
 
+def _next_cursor(result, seen_cursors):
+    """Return the next pagination cursor, rejecting one the server has repeated."""
+    cursor = result.next_cursor
+    if not cursor:
+        return None
+    if cursor in seen_cursors:
+        raise RuntimeError(f"Server repeated pagination cursor {cursor!r}")
+    seen_cursors.add(cursor)
+    return cursor
+
+
 async def fetch_tools(url, stateless):
     """Connect to an MCP server and return all of its tools."""
     tools = []
     cursor = None
+    seen_cursors = set()
 
     async with Client(url, mode=_client_mode(stateless)) as client:
         while True:
             result = await client.list_tools(cursor=cursor)
             tools.extend(result.tools)
-            cursor = result.next_cursor
+            cursor = _next_cursor(result, seen_cursors)
             if not cursor:
                 return tools
 
@@ -68,12 +80,13 @@ async def fetch_prompts(url, stateless):
     """Connect to an MCP server and return all of its prompts."""
     prompts = []
     cursor = None
+    seen_cursors = set()
 
     async with Client(url, mode=_client_mode(stateless)) as client:
         while True:
             result = await client.list_prompts(cursor=cursor)
             prompts.extend(result.prompts)
-            cursor = result.next_cursor
+            cursor = _next_cursor(result, seen_cursors)
             if not cursor:
                 return prompts
 
@@ -82,12 +95,13 @@ async def fetch_resources(url, stateless):
     """Connect to an MCP server and return all of its resources."""
     resources = []
     cursor = None
+    seen_cursors = set()
 
     async with Client(url, mode=_client_mode(stateless)) as client:
         while True:
             result = await client.list_resources(cursor=cursor)
             resources.extend(result.resources)
-            cursor = result.next_cursor
+            cursor = _next_cursor(result, seen_cursors)
             if not cursor:
                 return resources
 
@@ -100,15 +114,21 @@ async def fetch_tool(url, name, stateless):
 
 async def _find_tool(client, name):
     cursor = None
+    seen_cursors = set()
 
     while True:
         result = await client.list_tools(cursor=cursor)
         for tool in result.tools:
             if tool.name == name:
                 return tool
-        cursor = result.next_cursor
+        cursor = _next_cursor(result, seen_cursors)
         if not cursor:
             return None
+
+
+def _as_schema_dict(schema):
+    """Treat a boolean or otherwise non-object subschema as unconstrained."""
+    return schema if isinstance(schema, dict) else {}
 
 
 def _resolve_local_ref(schema, root_schema):
@@ -136,7 +156,7 @@ def _resolve_local_ref(schema, root_schema):
 
 
 def _schema_allows_string(schema, root_schema):
-    schema = _resolve_local_ref(schema, root_schema)
+    schema = _as_schema_dict(_resolve_local_ref(schema, root_schema))
     schema_type = schema.get("type")
     if schema_type == "string":
         return True
@@ -156,7 +176,7 @@ def _schema_allows_string(schema, root_schema):
 
 
 def _schema_requires_json(schema, root_schema):
-    schema = _resolve_local_ref(schema, root_schema)
+    schema = _as_schema_dict(_resolve_local_ref(schema, root_schema))
     if not schema or _schema_allows_string(schema, root_schema):
         return False
     return any(
@@ -336,12 +356,9 @@ async def _doctor_mode(url, stateless, selected):
                 result = await client.list_tools(cursor=cursor)
                 pages += 1
                 tool_count += len(result.tools)
-                cursor = result.next_cursor
+                cursor = _next_cursor(result, seen_cursors)
                 if not cursor:
                     break
-                if cursor in seen_cursors:
-                    raise RuntimeError(f"Server repeated pagination cursor {cursor!r}")
-                seen_cursors.add(cursor)
 
             return {
                 "mode": mode_name,
@@ -407,6 +424,7 @@ def _full_description_lines(description):
 
 
 def _short_schema_type(schema):
+    schema = _as_schema_dict(schema)
     schema_type = schema.get("type")
     if isinstance(schema_type, list):
         return " | ".join(schema_type)
@@ -425,6 +443,7 @@ def _short_schema_type(schema):
 
 def _schema_type(schema):
     label = _short_schema_type(schema)
+    schema = _as_schema_dict(schema)
     details = []
 
     if "enum" in schema:
@@ -481,7 +500,7 @@ def _render_parameters(input_schema):
     for name, schema in properties.items():
         requirement = "required" if name in required else "optional"
         click.echo(f"    {name} ({_schema_type(schema)}, {requirement})")
-        for line in _full_description_lines(schema.get("description")):
+        for line in _full_description_lines(_as_schema_dict(schema).get("description")):
             click.echo(f"      {line}" if line else "")
 
 
@@ -666,6 +685,13 @@ def inspect_tool(url, tool_name, json_output, stateless):
     _render_json_section("Metadata", tool.meta)
 
 
+def _first_text_content(content):
+    return next(
+        (block.text for block in content if isinstance(block, types.TextContent)),
+        None,
+    )
+
+
 def _render_call_result(result):
     for content in result.content:
         if isinstance(content, types.TextContent):
@@ -766,10 +792,9 @@ def call_command(
     elif json_output:
         if result.structured_content is not None:
             click.echo(json.dumps(result.structured_content, indent=2))
-        elif result.content and isinstance(result.content[0], types.TextContent):
-            click.echo(result.content[0].text)
         else:
-            click.echo("null")
+            text = _first_text_content(result.content)
+            click.echo("null" if text is None else text)
     else:
         _render_call_result(result)
 
