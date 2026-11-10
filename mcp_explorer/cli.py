@@ -137,6 +137,9 @@ def _resolve_local_ref(schema, root_schema):
 
 def _schema_allows_string(schema, root_schema):
     schema = _resolve_local_ref(schema, root_schema)
+    if isinstance(schema, bool):
+        # Boolean subschemas are legal JSON Schema: true accepts anything
+        return schema
     schema_type = schema.get("type")
     if schema_type == "string":
         return True
@@ -157,6 +160,9 @@ def _schema_allows_string(schema, root_schema):
 
 def _schema_requires_json(schema, root_schema):
     schema = _resolve_local_ref(schema, root_schema)
+    if isinstance(schema, bool):
+        # true accepts plain strings as-is, false rejects everything later
+        return False
     if not schema or _schema_allows_string(schema, root_schema):
         return False
     return any(
@@ -407,6 +413,8 @@ def _full_description_lines(description):
 
 
 def _short_schema_type(schema):
+    if isinstance(schema, bool):
+        return "value" if schema else "never"
     schema_type = schema.get("type")
     if isinstance(schema_type, list):
         return " | ".join(schema_type)
